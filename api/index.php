@@ -124,6 +124,34 @@ function syncColumnTags(PDO $pdo, int $workspaceId, int $columnId, array $tagIds
         foreach ($tagIds as $tagId) $insert->execute([$columnId, $tagId]);
     }
 }
+function syncCardAssignees(PDO $pdo, int $workspaceId, int $cardId, array $userIds): void {
+    $userIds = array_values(array_unique(array_filter(array_map('intval', $userIds), fn($id) => $id > 0)));
+    if ($userIds) {
+        $marks = implode(',', array_fill(0, count($userIds), '?'));
+        $params = array_merge([$workspaceId], $userIds);
+        $stmt = $pdo->prepare("
+            SELECT DISTINCT u.id
+            FROM users u
+            LEFT JOIN workspace_members wm
+              ON wm.user_id = u.id AND wm.workspace_id = ?
+            WHERE u.status = 'active'
+              AND (wm.workspace_id IS NOT NULL OR u.is_admin = 1)
+              AND u.id IN ($marks)
+        ");
+        $stmt->execute($params);
+        $valid = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+        sort($valid);
+        $check = $userIds;
+        sort($check);
+        if ($valid !== $check) fail('Uno o più assegnatari non appartengono al workspace.');
+    }
+
+    $pdo->prepare("DELETE FROM card_assignees WHERE card_id = ?")->execute([$cardId]);
+    if ($userIds) {
+        $insert = $pdo->prepare("INSERT INTO card_assignees (card_id, user_id) VALUES (?, ?)");
+        foreach ($userIds as $userId) $insert->execute([$cardId, $userId]);
+    }
+}
 function cardWorkspaceId(PDO $pdo, int $cardId): ?int {
     $stmt = $pdo->prepare("
         SELECT bc.board_id
@@ -183,6 +211,20 @@ function workspacePayload(PDO $pdo, int $workspaceId, string $role): array {
     foreach ($tags as &$tag) $tag['id'] = (int)$tag['id'];
     unset($tag);
 
+    $peopleStmt = $pdo->prepare("
+        SELECT DISTINCT u.id, u.username
+        FROM users u
+        LEFT JOIN workspace_members wm
+          ON wm.user_id = u.id AND wm.workspace_id = ?
+        WHERE u.status = 'active'
+          AND (wm.workspace_id IS NOT NULL OR u.is_admin = 1)
+        ORDER BY u.username
+    ");
+    $peopleStmt->execute([$workspaceId]);
+    $assignableUsers = $peopleStmt->fetchAll();
+    foreach ($assignableUsers as &$person) $person['id'] = (int)$person['id'];
+    unset($person);
+
     $stmt = $pdo->prepare("
         SELECT id, board_id, name, color, position
         FROM board_columns
@@ -195,6 +237,7 @@ function workspacePayload(PDO $pdo, int $workspaceId, string $role): array {
     $columnTags = [];
     $cardsByColumn = [];
     $attachmentsByCard = [];
+    $assigneesByCard = [];
 
     if ($columns) {
         $columnIds = array_map(fn($c) => (int)$c['id'], $columns);
@@ -228,6 +271,7 @@ function workspacePayload(PDO $pdo, int $workspaceId, string $role): array {
         if ($cards) {
             $cardIds = array_map(fn($c) => (int)$c['id'], $cards);
             $cardMarks = implode(',', array_fill(0, count($cardIds), '?'));
+
             $att = $pdo->prepare("
                 SELECT id, card_id, original_name, mime_type, file_size, created_at
                 FROM card_attachments
@@ -244,6 +288,22 @@ function workspacePayload(PDO $pdo, int $workspaceId, string $role): array {
                     'created_at' => $a['created_at'],
                 ];
             }
+
+            $assigneeStmt = $pdo->prepare("
+                SELECT ca.card_id, u.id, u.username
+                FROM card_assignees ca
+                JOIN users u ON u.id = ca.user_id
+                WHERE ca.card_id IN ($cardMarks)
+                  AND u.status = 'active'
+                ORDER BY u.username
+            ");
+            $assigneeStmt->execute($cardIds);
+            foreach ($assigneeStmt->fetchAll() as $a) {
+                $assigneesByCard[(int)$a['card_id']][] = [
+                    'id' => (int)$a['id'],
+                    'username' => $a['username'],
+                ];
+            }
         }
 
         foreach ($cards as $card) {
@@ -251,6 +311,7 @@ function workspacePayload(PDO $pdo, int $workspaceId, string $role): array {
             $card['column_id'] = (int)$card['column_id'];
             $card['position'] = (int)$card['position'];
             $card['attachments'] = $attachmentsByCard[$card['id']] ?? [];
+            $card['assignees'] = $assigneesByCard[$card['id']] ?? [];
             $cardsByColumn[$card['column_id']][] = $card;
         }
     }
@@ -270,6 +331,7 @@ function workspacePayload(PDO $pdo, int $workspaceId, string $role): array {
         'logo_url' => $workspace['logo_url'],
         'role' => $role,
         'tags' => $tags,
+        'assignable_users' => $assignableUsers,
         'columns' => $columns,
     ];
 }
@@ -297,7 +359,7 @@ $action = (string)($_GET['action'] ?? 'status');
 
 if ($setupRequired) {
     if ($action === 'status') {
-        reply(['ok' => true, 'setup_required' => true, 'authenticated' => false, 'version' => '0.3.0']);
+        reply(['ok' => true, 'setup_required' => true, 'authenticated' => false, 'version' => '0.4.0']);
     }
     fail('Configurazione server incompleta.', 503);
 }
@@ -456,6 +518,18 @@ try {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS card_assignees (
+            card_id INT UNSIGNED NOT NULL,
+            user_id INT UNSIGNED NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (card_id, user_id),
+            KEY idx_card_assignees_user (user_id),
+            CONSTRAINT fk_card_assignees_card FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE,
+            CONSTRAINT fk_card_assignees_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
     if (!(int)$pdo->query("SELECT COUNT(*) FROM boards")->fetchColumn()) {
         $pdo->prepare("INSERT INTO boards (name, position) VALUES (?, 1000)")->execute(['Progetti']);
     }
@@ -470,12 +544,12 @@ try {
 if ($action === 'health') {
     reply([
         'ok' => true,
-        'schema' => '0.3',
+        'schema' => '0.4',
         'has_workspace' => (bool)$pdo->query("SELECT 1 FROM boards LIMIT 1")->fetchColumn(),
         'has_column' => (bool)$pdo->query("SELECT 1 FROM board_columns LIMIT 1")->fetchColumn(),
         'mail_available' => function_exists('mail'),
         'uploads_writable' => is_dir($uploadsRoot) && is_writable($uploadsRoot),
-        'version' => '0.3.0',
+        'version' => '0.4.0',
     ]);
 }
 
@@ -495,7 +569,7 @@ if ($action === 'status') {
             'has_admin' => $adminExists,
             'challenge' => ['question' => "$a + $b"],
             'site' => $site,
-            'version' => '0.3.0',
+            'version' => '0.4.0',
         ]);
     }
 
@@ -506,7 +580,7 @@ if ($action === 'status') {
         'user' => $user,
         'workspaces' => workspaceList($pdo, $user),
         'site' => $site,
-        'version' => '0.3.0',
+        'version' => '0.4.0',
     ]);
 }
 
@@ -798,11 +872,20 @@ try {
             $stmt = $pdo->prepare("SELECT COALESCE(MAX(position), 0) + 1000 FROM cards WHERE column_id = ? AND archived = 0");
             $stmt->execute([$columnId]);
             $position = (int)$stmt->fetchColumn();
+            $pdo->beginTransaction();
             $pdo->prepare("
                 INSERT INTO cards (column_id, title, description, label, due_date, position)
                 VALUES (?, ?, ?, ?, ?, ?)
             ")->execute([$columnId, $title, $description, $label, $dueDate, $position]);
-            reply(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+            $cardId = (int)$pdo->lastInsertId();
+            syncCardAssignees(
+                $pdo,
+                $workspaceId,
+                $cardId,
+                is_array($body['assignee_ids'] ?? null) ? $body['assignee_ids'] : []
+            );
+            $pdo->commit();
+            reply(['ok' => true, 'id' => $cardId]);
         }
 
         case 'card:update': {
@@ -823,7 +906,15 @@ try {
                 SET c.title = ?, c.description = ?, c.label = ?, c.due_date = ?
                 WHERE c.id = ? AND bc.board_id = ? AND c.archived = 0
             ");
+            $pdo->beginTransaction();
             $stmt->execute([$title, $description, $label, $dueDate, $id, $workspaceId]);
+            syncCardAssignees(
+                $pdo,
+                $workspaceId,
+                $id,
+                is_array($body['assignee_ids'] ?? null) ? $body['assignee_ids'] : []
+            );
+            $pdo->commit();
             reply(['ok' => true]);
         }
 
@@ -1044,8 +1135,17 @@ try {
             $role = (string)($body['role'] ?? '');
             if ($role === '') {
                 if ($targetUserId === (int)$user['id'] && empty($user['is_admin'])) fail('Non puoi rimuovere te stesso dal workspace.');
+                $pdo->beginTransaction();
                 $pdo->prepare("DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?")
                     ->execute([$workspaceId, $targetUserId]);
+                $pdo->prepare("
+                    DELETE ca
+                    FROM card_assignees ca
+                    JOIN cards c ON c.id = ca.card_id
+                    JOIN board_columns bc ON bc.id = c.column_id
+                    WHERE bc.board_id = ? AND ca.user_id = ?
+                ")->execute([$workspaceId, $targetUserId]);
+                $pdo->commit();
             } else {
                 if (!in_array($role, ['viewer', 'editor', 'admin'], true)) fail('Ruolo non valido.');
                 $stmt = $pdo->prepare("SELECT 1 FROM users WHERE id = ? AND status='active'");
