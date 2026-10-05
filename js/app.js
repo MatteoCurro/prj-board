@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const API = 'api/';
+  const API = 'api/index.php';
   const state = {
     board: null,
     search: '',
@@ -57,7 +57,7 @@
     } catch (_) {
       throw new Error('Risposta server non valida.');
     }
-    if (response.status === 401) {
+    if (response.status === 401 && action !== 'login') {
       showLogin();
       throw new Error('Sessione scaduta.');
     }
