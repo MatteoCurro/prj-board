@@ -305,4 +305,19 @@ jobs:
             fi
           fi
 
+          DMARC="$(dig +short TXT _dmarc.curromatteo.it 2>/dev/null | tr -d '"' || true)"
+          if printf '%s' "$DMARC" | grep -Fq 'v=DMARC1'; then
+            echo "DMARC check OK: $DMARC"
+          else
+            echo "::warning::No DMARC record detected for curromatteo.it. Consider starting with p=none and a monitored rua address."
+          fi
+
+          DKIM="$(dig +short CNAME gm1._domainkey.curromatteo.it 2>/dev/null || true)"
+          if printf '%s' "$DKIM" | grep -Fq 'gm1.gandimail.net'; then
+            echo "DKIM DNS check OK: gm1 selector present."
+          else
+            echo "::warning::Gandi Mail DKIM selector gm1 was not detected. This matters if messages are sent through Gandi Mail; Web Hosting relay signing should be verified from received headers."
+          fi
+
+
           echo "PRJ Board deployed and health-checked: https://prj.curromatteo.it/"
