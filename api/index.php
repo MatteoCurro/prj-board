@@ -677,7 +677,7 @@ try {
         case 'tag:update': {
             $body = jsonBody();
             $workspaceId = intId($body['workspace_id'] ?? null);
-            requireWorkspaceRole($pdo, $user, $workspaceId, ['admin']);
+            requireWorkspaceRole($pdo, $user, $workspaceId, ['editor', 'admin']);
             $name = cleanText($body['name'] ?? '', 40);
             $color = validColor((string)($body['color'] ?? '#5b6255'));
             if ($name === '') fail('Inserisci il nome del tag.');
@@ -705,7 +705,7 @@ try {
         case 'tag:delete': {
             $body = jsonBody();
             $workspaceId = intId($body['workspace_id'] ?? null);
-            requireWorkspaceRole($pdo, $user, $workspaceId, ['admin']);
+            requireWorkspaceRole($pdo, $user, $workspaceId, ['editor', 'admin']);
             $id = intId($body['id'] ?? null);
             $pdo->prepare("DELETE FROM workspace_tags WHERE id = ? AND workspace_id = ?")->execute([$id, $workspaceId]);
             reply(['ok' => true]);
