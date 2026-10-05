@@ -60,7 +60,8 @@ function scanGmailToPrj() {
     const now = Date.now();
     const cursor = getCursorMs_(now);
     const context = fetchPrjContext_(cfg);
-    const columns = flattenColumns_(context, cfg.workspaceId);
+    const workspace = resolveWorkspace_(context, cfg);
+    const columns = flattenColumns_(workspace);
     if (!columns.length) throw new Error('Nessuna colonna disponibile nel workspace PRJ configurato.');
 
     const query = 'newer_than:' + cfg.lookbackDays + 'd -in:spam -in:trash';
@@ -118,7 +119,7 @@ function scanGmailToPrj() {
       }
 
       const payload = {
-        workspace_id: cfg.workspaceId,
+        workspace_id: workspace.id,
         column_id: chosen.id,
         source: 'gmail',
         source_external_id: 'gmail-thread-' + envelope.thread_id,
@@ -166,8 +167,7 @@ function scanGmailToPrj() {
 function testConnections() {
   const cfg = loadConfig_();
   const context = fetchPrjContext_(cfg);
-  const workspace = (context.workspaces || []).find(w => Number(w.id) === Number(cfg.workspaceId));
-  if (!workspace) throw new Error('Workspace PRJ non trovato: ' + cfg.workspaceId);
+  const workspace = resolveWorkspace_(context, cfg);
 
   const me = cfg.myEmail;
   const openAiResponse = UrlFetchApp.fetch('https://api.openai.com/v1/models/' + encodeURIComponent(cfg.model), {
@@ -226,12 +226,14 @@ function deleteBridgeTriggers_() {
 
 function loadConfig_() {
   const p = PropertiesService.getScriptProperties().getProperties();
-  const required = ['PRJ_BASE_URL', 'PRJ_AUTOMATION_KEY', 'PRJ_WORKSPACE_ID', 'OPENAI_API_KEY'];
+  const required = ['PRJ_BASE_URL', 'PRJ_AUTOMATION_KEY', 'OPENAI_API_KEY'];
   const missing = required.filter(k => !String(p[k] || '').trim());
   if (missing.length) throw new Error('Proprietà script mancanti: ' + missing.join(', '));
 
-  const workspaceId = Number(p.PRJ_WORKSPACE_ID);
-  if (!Number.isInteger(workspaceId) || workspaceId < 1) throw new Error('PRJ_WORKSPACE_ID non valido.');
+  const workspaceIdRaw = String(p.PRJ_WORKSPACE_ID || '').trim();
+  const workspaceId = workspaceIdRaw ? Number(workspaceIdRaw) : null;
+  if (workspaceId !== null && (!Number.isInteger(workspaceId) || workspaceId < 1)) throw new Error('PRJ_WORKSPACE_ID non valido.');
+  const workspaceName = String(p.PRJ_WORKSPACE_NAME || '').trim();
 
   const myEmail = String(p.MY_EMAIL || Session.getEffectiveUser().getEmail() || '').trim().toLowerCase();
   if (!myEmail) throw new Error('Impossibile determinare l’email dell’account. Imposta MY_EMAIL.');
@@ -240,6 +242,7 @@ function loadConfig_() {
     prjBaseUrl: String(p.PRJ_BASE_URL).replace(/\/+$/, ''),
     automationKey: String(p.PRJ_AUTOMATION_KEY),
     workspaceId,
+    workspaceName,
     openAiKey: String(p.OPENAI_API_KEY),
     model: String(p.OPENAI_MODEL || PRJ_GMAIL.DEFAULT_MODEL).trim(),
     myEmail,
@@ -258,16 +261,32 @@ function getCursorMs_(now) {
 }
 
 function fetchPrjContext_(cfg) {
-  const url = cfg.prjBaseUrl + '/api/automation.php?action=context&workspace_id=' + encodeURIComponent(cfg.workspaceId);
+  let url = cfg.prjBaseUrl + '/api/automation.php?action=context';
+  if (cfg.workspaceId) url += '&workspace_id=' + encodeURIComponent(cfg.workspaceId);
   return fetchJson_(url, {
     method: 'get',
     headers: { Authorization: 'Bearer ' + cfg.automationKey }
   }, 'PRJ context');
 }
 
-function flattenColumns_(context, workspaceId) {
-  const workspace = (context.workspaces || []).find(w => Number(w.id) === Number(workspaceId));
-  if (!workspace) return [];
+function resolveWorkspace_(context, cfg) {
+  const workspaces = context.workspaces || [];
+  if (cfg.workspaceId) {
+    const byId = workspaces.find(w => Number(w.id) === Number(cfg.workspaceId));
+    if (!byId) throw new Error('Workspace PRJ non trovato: id ' + cfg.workspaceId);
+    return byId;
+  }
+  if (cfg.workspaceName) {
+    const target = cfg.workspaceName.toLowerCase();
+    const byName = workspaces.find(w => String(w.name || '').trim().toLowerCase() === target);
+    if (!byName) throw new Error('Workspace PRJ non trovato: "' + cfg.workspaceName + '". Disponibili: ' + workspaces.map(w => w.name).join(', '));
+    return byName;
+  }
+  if (workspaces.length === 1) return workspaces[0];
+  throw new Error('Imposta PRJ_WORKSPACE_ID oppure PRJ_WORKSPACE_NAME. Workspace disponibili: ' + workspaces.map(w => w.id + ' = ' + w.name).join(', '));
+}
+
+function flattenColumns_(workspace) {
   return (workspace.columns || []).map(c => ({
     id: Number(c.id),
     name: String(c.name || ''),
