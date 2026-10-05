@@ -260,6 +260,7 @@ jobs:
 
           node - <<'NODE'
           const x = require('/tmp/prj-health.json');
+          console.log('Health flags:', {ok:x.ok,schema:x.schema,has_workspace:x.has_workspace,has_column:x.has_column,uploads_writable:x.uploads_writable,mail_available:x.mail_available,smtp_available:x.smtp_available,smtp_ms:x.smtp_ms});
           if (!x.ok || x.schema !== '1.2' || !x.has_workspace || !x.has_column || !x.uploads_writable || !x.mail_available || !x.smtp_available) process.exit(1);
           console.log('PRJ health OK: schema 1.2, private uploads writable, local SMTP reachable in '+x.smtp_ms+'ms.');
           NODE
