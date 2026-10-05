@@ -3,6 +3,9 @@ name: Deploy PRJ Board
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'integrations/**'
   workflow_dispatch:
 
 permissions:
