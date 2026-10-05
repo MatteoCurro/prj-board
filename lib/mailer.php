@@ -92,6 +92,124 @@ function prj_mail_html_document(string $title, string $body): string {
         . '</div></body></html>';
 }
 
+function prj_smtp_local_diagnostic_send(array $config, string $to, string $subject, string $html, string $text = ''): array {
+    $to = trim($to);
+    $from = trim((string)($config['mail_from'] ?? 'prj@curromatteo.it'));
+    $fromName = trim((string)($config['mail_from_name'] ?? 'PRJ'));
+    if (!filter_var($to, FILTER_VALIDATE_EMAIL)) throw new InvalidArgumentException('Destinatario email non valido.');
+    if (!filter_var($from, FILTER_VALIDATE_EMAIL)) throw new InvalidArgumentException('Mittente email non valido.');
+
+    if ($text === '') {
+        $text = trim(html_entity_decode(strip_tags(str_replace(['<br>', '<br/>', '<br />', '</p>', '</li>'], ["\n", "\n", "\n", "\n", "\n"], $html)), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    }
+
+    $timeout = (float)($config['smtp_timeout'] ?? 8);
+    $helo = preg_replace('/[^a-zA-Z0-9.-]/', '', (string)($config['smtp_helo'] ?? 'prj.curromatteo.it')) ?: 'prj.curromatteo.it';
+    $transcript = [];
+    $socket = null;
+    $stage = 'connect';
+
+    $record = static function (array &$transcript, string $step, array $response): void {
+        $transcript[] = [
+            'step' => $step,
+            'code' => (int)($response['code'] ?? 0),
+            'response' => (string)($response['text'] ?? ''),
+        ];
+    };
+
+    $command = static function ($socket, string $step, string $command, array $expected, array &$transcript) use ($record): array {
+        if ($command !== '') fwrite($socket, $command . "\r\n");
+        $response = prj_smtp_read($socket);
+        $record($transcript, $step, $response);
+        if (!in_array($response['code'], $expected, true)) {
+            throw new RuntimeException('SMTP ' . ($response['code'] ?: '???') . ' in fase ' . $step . ': ' . $response['text']);
+        }
+        return $response;
+    };
+
+    try {
+        $errno = 0;
+        $errstr = '';
+        $socket = @fsockopen('localhost', 25, $errno, $errstr, $timeout);
+        if (!$socket) throw new RuntimeException("Connessione al relay locale fallita ($errno): $errstr");
+        stream_set_timeout($socket, (int)ceil($timeout));
+
+        $banner = prj_smtp_read($socket);
+        $record($transcript, 'CONNECT', $banner);
+        if ($banner['code'] !== 220) throw new RuntimeException('SMTP ' . ($banner['code'] ?: '???') . ' in fase CONNECT: ' . $banner['text']);
+
+        $stage = 'EHLO';
+        $command($socket, 'EHLO', 'EHLO ' . $helo, [250], $transcript);
+        $stage = 'MAIL FROM';
+        $command($socket, 'MAIL FROM', 'MAIL FROM:<' . $from . '>', [250], $transcript);
+        $stage = 'RCPT TO';
+        $command($socket, 'RCPT TO', 'RCPT TO:<' . $to . '>', [250, 251], $transcript);
+        $stage = 'DATA';
+        $command($socket, 'DATA', 'DATA', [354], $transcript);
+
+        $boundary = 'prj_diag_' . bin2hex(random_bytes(10));
+        $headers = [
+            'Date: ' . date(DATE_RFC2822),
+            'From: ' . prj_mail_header($fromName) . ' <' . $from . '>',
+            'To: <' . $to . '>',
+            'Subject: ' . prj_mail_header($subject),
+            'Message-ID: <' . bin2hex(random_bytes(12)) . '@' . preg_replace('/^.*@/', '', $from) . '>',
+            'MIME-Version: 1.0',
+            'Content-Type: multipart/alternative; boundary="' . $boundary . '"',
+            'X-Mailer: PRJ Board Relay Diagnostic',
+        ];
+        $message = implode("\r\n", $headers) . "\r\n\r\n"
+            . '--' . $boundary . "\r\n"
+            . "Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n"
+            . str_replace("\n", "\r\n", str_replace("\r", '', $text)) . "\r\n\r\n"
+            . '--' . $boundary . "\r\n"
+            . "Content-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n"
+            . $html . "\r\n\r\n"
+            . '--' . $boundary . "--\r\n";
+        $message = preg_replace('/(?m)^\./', '..', $message);
+
+        $stage = 'QUEUE';
+        fwrite($socket, $message . "\r\n.\r\n");
+        $queued = prj_smtp_read($socket);
+        $record($transcript, 'QUEUE', $queued);
+        if ($queued['code'] !== 250) {
+            throw new RuntimeException('SMTP ' . ($queued['code'] ?: '???') . ' in fase QUEUE: ' . $queued['text']);
+        }
+
+        try { $command($socket, 'QUIT', 'QUIT', [221, 250], $transcript); } catch (Throwable) {}
+        fclose($socket);
+
+        return [
+            'ok' => true,
+            'accepted' => true,
+            'delivery_confirmed' => false,
+            'recipient' => $to,
+            'transport' => 'smtp-local-diagnostic',
+            'relay' => 'localhost:25',
+            'stage' => 'QUEUE',
+            'response' => $queued['text'],
+            'transcript' => $transcript,
+        ];
+    } catch (Throwable $e) {
+        if (is_resource($socket)) {
+            try { fwrite($socket, "QUIT\r\n"); } catch (Throwable) {}
+            fclose($socket);
+        }
+        return [
+            'ok' => false,
+            'accepted' => false,
+            'delivery_confirmed' => false,
+            'recipient' => $to,
+            'transport' => 'smtp-local-diagnostic',
+            'relay' => 'localhost:25',
+            'stage' => $stage,
+            'response' => null,
+            'error' => $e->getMessage(),
+            'transcript' => $transcript,
+        ];
+    }
+}
+
 function prj_php_mail_send(array $config, string $to, string $subject, string $html): array {
     if (!function_exists('mail')) {
         throw new RuntimeException('PHP mail() non disponibile.');

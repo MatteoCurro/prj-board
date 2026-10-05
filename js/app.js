@@ -393,9 +393,16 @@ async function sendTestEmail(){
   btn.disabled=true;btn.classList.add('loading');
   await persistProfileFromForm();
   const d=await api('email:test',{body:{}});
-  const via=d.transport==='smtp'?'SMTP Gandi':(d.transport==='php-mail'?'trasporto PHP/Gandi':d.transport||'trasporto email');
-  status.textContent='Messaggio accettato da '+via+' per '+d.recipient+'. Il recapito finale non è confermabile dall’app: verifica la casella e lo spam.';status.hidden=false;
-  toast('Messaggio accettato dal trasporto email.');
+  const diag=d.diagnostic||{},steps=(diag.transcript||[]).map(x=>x.step+' '+(x.code||'?')).join(' → ');
+  if(d.accepted){
+   const final=d.response?' Risposta finale: '+d.response+'.':'';
+   status.textContent='Relay locale Gandi '+(diag.relay||'localhost:25')+' ha accettato il messaggio per '+d.recipient+'. '+steps+'.'+final+' Il recapito finale al destinatario resta separato dalla presa in carico del relay.';
+   toast('Messaggio accettato dal relay locale Gandi.');
+  }else{
+   status.textContent='Relay locale Gandi ha rifiutato il messaggio in fase '+(diag.stage||'sconosciuta')+'. '+steps+'. '+(diag.error||'Nessun dettaglio ulteriore.');
+   toast('Il relay locale ha rifiutato il messaggio.','error');
+  }
+  status.hidden=false;
  }catch(x){err.textContent=x.message;err.hidden=false}finally{btn.classList.remove('loading');btn.disabled=!(state.user?.notification_email||'').trim()}
 }
 async function changeOwnPassword(e){
