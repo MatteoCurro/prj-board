@@ -12,7 +12,7 @@ function prj_digest_tasks(PDO $pdo, int $userId, int $dueDays): array {
         ->modify('+' . $dueDays . ' days')->format('Y-m-d');
 
     $stmt = $pdo->prepare("
-        SELECT c.id, c.title, c.due_date, c.priority, bc.name column_name, b.id workspace_id, b.name workspace_name
+        SELECT c.id, c.title, c.due_date, c.due_time, c.priority, bc.name column_name, b.id workspace_id, b.name workspace_name
         FROM card_assignees ca
         JOIN cards c ON c.id = ca.card_id
         JOIN board_columns bc ON bc.id = c.column_id
@@ -22,7 +22,7 @@ function prj_digest_tasks(PDO $pdo, int $userId, int $dueDays): array {
           AND c.completed = 0
           AND c.due_date IS NOT NULL
           AND c.due_date <= ?
-        ORDER BY c.due_date, b.position, bc.position, c.position, c.id
+        ORDER BY c.due_date, (c.due_time IS NULL), c.due_time, b.position, bc.position, c.position, c.id
     ");
     $stmt->execute([$userId, $maxDate]);
     return $stmt->fetchAll();
@@ -112,7 +112,8 @@ function prj_digest_render(array $user, array $tasks, string $appUrl, string $si
         $title = htmlspecialchars((string)$task['title'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $workspace = htmlspecialchars((string)$task['workspace_name'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $column = htmlspecialchars((string)$task['column_name'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $date = $due->format('d/m/Y');
+        $time = trim((string)($task['due_time'] ?? ''));
+        $date = $due->format('d/m/Y') . ($time !== '' ? ' · ' . substr($time, 0, 5) : '');
 
         $rows .= '<tr><td style="padding:14px 0;border-bottom:1px solid #2d312a">'
             . '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>'
