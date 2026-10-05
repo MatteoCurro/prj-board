@@ -1322,71 +1322,44 @@ try {
             }
 
             $site = siteSettings($pdo);
+            $siteName = (string)($site['name'] ?? 'PRJ');
             $display = trim((string)($user['display_name'] ?? '')) ?: '@' . $user['username'];
             $safeDisplay = htmlspecialchars($display, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $body = '<div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#d62b64;font-weight:700">PRJ</div>'
-                . '<h1 style="font-size:22px;margin:8px 0 8px;color:#f1f3ee">Notifica account</h1>'
-                . '<p style="font-size:13px;line-height:1.55;color:#a9afa4;margin:0">Ciao ' . $safeDisplay . ', questo messaggio verifica il percorso di consegna del relay locale di PRJ.</p>'
-                . '<p style="font-size:12px;line-height:1.5;color:#747a70;margin:18px 0 0">La diagnostica registra le risposte SMTP del relay Gandi fino alla presa in carico del messaggio.</p>';
-            $subject = '[' . ($site['name'] ?? 'PRJ') . '] Notifica account';
+            $safeSite = htmlspecialchars($siteName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $subject = '[' . $siteName . '] Notifica PRJ';
+            $body = '<div style="font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#db2b64;font-weight:800">' . $safeSite . '</div>'
+                . '<h1 style="font-size:24px;line-height:1.2;margin:8px 0 7px;color:#f5f6f0">Le notifiche sono attive</h1>'
+                . '<p style="font-size:13px;line-height:1.6;color:#a8afa0;margin:0">Ciao ' . $safeDisplay . ', questo messaggio conferma che PRJ riesce a inviare notifiche al tuo indirizzo configurato.</p>'
+                . '<div style="margin-top:18px;padding:13px 14px;background:#20231e;border:1px solid #32362e;border-radius:12px">'
+                . '<div style="font-size:11px;color:#7f8779;text-transform:uppercase;letter-spacing:.08em">Destinatario</div>'
+                . '<div style="font-size:13px;color:#f5f6f0;font-weight:700;margin-top:4px">' . htmlspecialchars($recipient, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</div>'
+                . '</div>'
+                . '<p style="font-size:11px;line-height:1.55;color:#747c70;margin:18px 0 0">I riepiloghi automatici vengono inviati solo quando ci sono attività aperte, assegnate a te e con una scadenza nella finestra impostata.</p>';
+            $textBody = "Ciao $display,\n\nLe notifiche PRJ sono attive per $recipient.\n"
+                . "I riepiloghi automatici vengono inviati solo quando ci sono attività aperte, assegnate a te e con una scadenza nella finestra impostata.\n";
 
-            $textBody = "Ciao $display,\n\nQuesto messaggio verifica il percorso di consegna del relay locale di PRJ.\n";
-            $mail = prj_smtp_local_diagnostic_send(
-                $config,
-                $recipient,
-                $subject,
-                prj_mail_html_document($subject, $body),
-                $textBody
-            );
-
-            $runtime = prj_mail_runtime_diagnostic();
-            $sendmail = null;
-            $phpMail = null;
-            $accepted = !empty($mail['accepted']);
-
-            if (!$accepted) {
-                $sendmail = prj_sendmail_verbose_diagnostic($config, $recipient, $subject, $textBody);
-                if (!empty($sendmail['attempted'])) {
-                    $accepted = !empty($sendmail['ok']);
-                } else {
-                    try {
-                        $phpMail = prj_php_mail_send($config, $recipient, $subject, prj_mail_html_document($subject, $body));
-                        $accepted = !empty($phpMail['accepted']);
-                    } catch (Throwable $fallbackError) {
-                        $phpMail = [
-                            'accepted' => false,
-                            'error' => $fallbackError->getMessage(),
-                        ];
-                    }
-                }
+            try {
+                $mail = prj_send_mail(
+                    $config,
+                    $recipient,
+                    $subject,
+                    prj_mail_html_document($subject, $body, 'PRJ riesce a inviare notifiche al tuo indirizzo configurato.'),
+                    $textBody
+                );
+                prj_digest_record($pdo, (int)$user['id'], 'test', $recipient, 'accepted', 0);
+                reply([
+                    'ok' => true,
+                    'accepted' => true,
+                    'delivery_confirmed' => false,
+                    'recipient' => $recipient,
+                    'transport' => $mail['transport'] ?? 'unknown',
+                    'response' => $mail['response'] ?? null,
+                    'message_id' => $mail['message_id'] ?? null,
+                ]);
+            } catch (Throwable $e) {
+                prj_digest_record($pdo, (int)$user['id'], 'test', $recipient, 'failed', 0, $e->getMessage());
+                fail('Invio email non riuscito: ' . $e->getMessage(), 502);
             }
-            prj_digest_record(
-                $pdo,
-                (int)$user['id'],
-                'test',
-                $recipient,
-                $accepted ? 'accepted' : 'failed',
-                0,
-                $accepted ? null : (string)($mail['error'] ?? 'Relay locale non ha accettato il messaggio.')
-            );
-
-            reply([
-                'ok' => true,
-                'accepted' => $accepted,
-                'delivery_confirmed' => false,
-                'recipient' => $recipient,
-                'transport' => !empty($sendmail['attempted']) ? 'sendmail-path-diagnostic' : ($phpMail['transport'] ?? ($mail['transport'] ?? 'smtp-local-diagnostic')),
-                'response' => $sendmail['stderr'] ?? $sendmail['stdout'] ?? $phpMail['response'] ?? $mail['response'] ?? null,
-                'diagnostic' => [
-                    'relay' => $mail['relay'] ?? 'localhost:25',
-                    'stage' => $mail['stage'] ?? null,
-                    'error' => $mail['error'] ?? null,
-                    'transcript' => $mail['transcript'] ?? [],
-                    'runtime' => $runtime,
-                    'sendmail' => $sendmail,
-                    'php_mail' => $phpMail,
-                ],
-            ]);
         }
 
         case 'calendar:feeds': {
