@@ -167,17 +167,7 @@ session_start();
 $action = (string)($_GET['action'] ?? 'status');
 
 if ($setupRequired) {
-    if ($action === 'health') {
-    reply([
-        'ok' => true,
-        'schema' => '0.2',
-        'has_workspace' => (bool)$pdo->query("SELECT 1 FROM boards LIMIT 1")->fetchColumn(),
-        'has_column' => (bool)$pdo->query("SELECT 1 FROM board_columns LIMIT 1")->fetchColumn(),
-        'version' => '0.2.0',
-    ]);
-}
-
-if ($action === 'status') {
+    if ($action === 'status') {
         reply(['ok' => true, 'setup_required' => true, 'authenticated' => false, 'version' => '0.2.0']);
     }
     fail('Configurazione server incompleta.', 503);
@@ -283,6 +273,16 @@ try {
 } catch (Throwable $e) {
     error_log('[PRJ] DB bootstrap error: ' . $e->getMessage());
     fail('Database non disponibile. Verifica la configurazione.', 503);
+}
+
+if ($action === 'health') {
+    reply([
+        'ok' => true,
+        'schema' => '0.2',
+        'has_workspace' => (bool)$pdo->query("SELECT 1 FROM boards LIMIT 1")->fetchColumn(),
+        'has_column' => (bool)$pdo->query("SELECT 1 FROM board_columns LIMIT 1")->fetchColumn(),
+        'version' => '0.2.0',
+    ]);
 }
 
 if ($action === 'status') {
