@@ -59,6 +59,9 @@ jobs:
         run: |
           set -euo pipefail
           php -l api/index.php
+          php -l lib/mailer.php
+          php -l lib/digest.php
+          php -l jobs/digest.php
           node --check js/app.js
           node tests/ui-contract.mjs
           node - <<'NODE'
@@ -80,11 +83,13 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf dist
-          mkdir -p dist/assets dist/js dist/api
+          mkdir -p dist/assets dist/js dist/api dist/lib dist/jobs
           cp index.html .htaccess dist/
           cp assets/app.css dist/assets/
           cp js/app.js dist/js/
           cp api/index.php dist/api/
+          cp lib/mailer.php lib/digest.php dist/lib/
+          cp jobs/digest.php dist/jobs/
 
           # Cache-bust frontend assets on every deployment so clients never keep
           # an older app.js/app.css after an interaction fix.
@@ -122,6 +127,13 @@ jobs:
               'db_user' => %s,
               'db_pass' => %s,
               'app_password' => %s,
+              'app_url' => 'https://prj.curromatteo.it',
+              'mail_from' => 'prj@curromatteo.it',
+              'mail_from_name' => 'PRJ',
+              'smtp_host' => 'localhost',
+              'smtp_port' => 25,
+              'smtp_helo' => 'prj.curromatteo.it',
+              'smtp_timeout' => 8,
           ];
           """ % tuple(php_string(os.environ[key]) for key in [
               "DB_HOST", "DB_NAME", "DB_USER", "DB_PASSWORD", "APP_PASSWORD"
@@ -160,9 +172,9 @@ jobs:
           set -euo pipefail
           {
             printf 'cd "%s"\n' "$REMOTE_PATH"
-            printf '%s\n' '-mkdir "assets"' '-mkdir "js"' '-mkdir "api"'
+            printf '%s\n' '-mkdir "assets"' '-mkdir "js"' '-mkdir "api"' '-mkdir "lib"' '-mkdir "jobs"'
 
-            find dist/assets dist/js dist/api -type f -print0 | sort -z | while IFS= read -r -d '' file; do
+            find dist/assets dist/js dist/api dist/lib dist/jobs -type f -print0 | sort -z | while IFS= read -r -d '' file; do
               rel="${file#dist/}"
               printf 'put "%s" "%s"\n' "$file" "$rel"
             done
@@ -185,6 +197,52 @@ jobs:
           set -euo pipefail
           sftp             -b /tmp/deploy.sftp             -i "$HOME/.ssh/gandi_deploy"             -o BatchMode=yes             -o IdentitiesOnly=yes             -o StrictHostKeyChecking=yes             -o UserKnownHostsFile="$HOME/.ssh/known_hosts"             -o ConnectTimeout=20             "$GANDI_SFTP_USER@$GANDI_SFTP_HOST"
 
+      - name: Configure daily digest schedule
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+
+          cat > /tmp/get-anacron.sftp <<'EOF'
+          get "/lamp0/etc/cron/anacrontab" "/tmp/prj-anacrontab"
+          bye
+          EOF
+
+          sftp \
+            -b /tmp/get-anacron.sftp \
+            -i "$HOME/.ssh/gandi_deploy" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            "$GANDI_SFTP_USER@$GANDI_SFTP_HOST"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('/tmp/prj-anacrontab')
+          lines = path.read_text(encoding='utf-8').splitlines()
+          lines = [line for line in lines if ' prj_digest ' not in f' {line} ']
+          lines.append('@daily 0 prj_digest php -f /srv/data/web/vhosts/prj.curromatteo.it/jobs/digest.php')
+          path.write_text('\n'.join(lines).rstrip() + '\n', encoding='utf-8')
+          PY
+
+          grep -Fq 'prj_digest php -f /srv/data/web/vhosts/prj.curromatteo.it/jobs/digest.php' /tmp/prj-anacrontab
+
+          cat > /tmp/put-anacron.sftp <<'EOF'
+          put "/tmp/prj-anacrontab" "/lamp0/etc/cron/anacrontab"
+          bye
+          EOF
+
+          sftp \
+            -b /tmp/put-anacron.sftp \
+            -i "$HOME/.ssh/gandi_deploy" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            "$GANDI_SFTP_USER@$GANDI_SFTP_HOST"
+
       - name: Verify production
         if: steps.config.outputs.ready == 'true'
         run: |
@@ -202,8 +260,15 @@ jobs:
 
           node - <<'NODE'
           const x = require('/tmp/prj-health.json');
-          if (!x.ok || x.schema !== '1.1' || !x.has_workspace || !x.has_column || !x.uploads_writable || !x.mail_available) process.exit(1);
-          console.log('PRJ health OK: schema 1.1, private uploads writable, PHP mail available.');
+          if (!x.ok || x.schema !== '1.2' || !x.has_workspace || !x.has_column || !x.uploads_writable || !x.mail_available || !x.smtp_available) process.exit(1);
+          console.log('PRJ health OK: schema 1.2, private uploads writable, local SMTP reachable in '+x.smtp_ms+'ms.');
           NODE
+
+          SPF="$(dig +short TXT curromatteo.it 2>/dev/null | tr -d '"' || true)"
+          if printf '%s' "$SPF" | grep -Fq '_spf.gpaas.net'; then
+            echo "SPF check OK: Gandi Web Hosting is authorized."
+          else
+            echo "::warning::SPF for curromatteo.it does not visibly include _spf.gpaas.net. SMTP can work, but deliverability may be reduced."
+          fi
 
           echo "PRJ Board deployed and health-checked: https://prj.curromatteo.it/"
