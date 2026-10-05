@@ -1,7 +1,7 @@
 (() => {
 'use strict';
 const API='api/index.php';
-const state={user:null,workspaces:[],workspace:null,site:null,search:'',cardSortables:[],columnSortable:null,status:null,memberTimer:null};
+const state={user:null,workspaces:[],workspace:null,site:null,search:'',completedView:false,cardSortables:[],columnSortable:null,status:null,memberTimer:null};
 const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const boardEl=$('#board'), emptyState=$('#emptyState'), toastRegion=$('#toastRegion');
 
@@ -70,18 +70,24 @@ function tagMix(tags=[]){
 function renderWorkspace(){
  destroySortables();boardEl.innerHTML='';const ws=state.workspace;if(!ws)return;
  $('#boardTitle').textContent=ws.name;setWorkspaceAvatar($('#workspaceAvatar'),ws);setWorkspaceAvatar($('#workspaceMiniAvatar'),ws);
- const total=ws.columns.reduce((n,c)=>n+c.cards.length,0);$('#boardMeta').textContent=ws.columns.length+(ws.columns.length===1?' colonna':' colonne')+' · '+total+(total===1?' card':' card')+' · '+roleLabel(ws.role);
- emptyState.hidden=ws.columns.length>0;boardEl.hidden=ws.columns.length===0;$('#addColumnBtn').hidden=!canEdit();$('#emptyAddColumnBtn').hidden=!canEdit();$('#editWorkspaceBtn').hidden=!canAdminWorkspace();$('#adminBtn').hidden=!(state.user?.is_admin||canAdminWorkspace());
+ const activeTotal=ws.columns.reduce((n,c)=>n+c.cards.filter(card=>!card.completed).length,0);
+ const completedTotal=ws.columns.reduce((n,c)=>n+c.cards.filter(card=>card.completed).length,0);
+ $('#boardMeta').textContent=ws.columns.length+(ws.columns.length===1?' colonna':' colonne')+' · '+activeTotal+' attive · '+completedTotal+' completate · '+roleLabel(ws.role);
+ $('#completedViewToggle').checked=state.completedView;
+ emptyState.hidden=ws.columns.length>0;boardEl.hidden=ws.columns.length===0;
+ $('#addColumnBtn').hidden=!canEdit()||state.completedView;$('#emptyAddColumnBtn').hidden=!canEdit();$('#editWorkspaceBtn').hidden=!canAdminWorkspace();$('#adminBtn').hidden=!(state.user?.is_admin||canAdminWorkspace());
  ws.columns.forEach(col=>{
-  const f=$('#columnTemplate').content.cloneNode(true),el=$('.column',f),mix=tagMix(col.tags);
+  const f=$('#columnTemplate').content.cloneNode(true),el=$('.column',f),mix=tagMix(col.tags),visibleCards=col.cards.filter(card=>Boolean(card.completed)===state.completedView);
   el.dataset.columnId=col.id;el.style.setProperty('--tag-bg',mix.column);el.style.setProperty('--tag-solid',mix.solid);
-  $('.column-title',f).textContent=col.name;$('.column-count',f).textContent=col.cards.length;
+  $('.column-title',f).textContent=col.name;$('.column-count',f).textContent=visibleCards.length;
   const tagBox=$('.column-tags',f);(col.tags||[]).forEach(t=>tagBox.append(tagPill(t)));
-  const list=$('.card-list',f);col.cards.forEach(card=>list.append(renderCard(card,col.tags||[])));
-  if(!canEdit()){$('.column-grip',f).hidden=true;$('.column-menu-btn',f).hidden=true;$('.add-card-btn',f).hidden=true}
+  const list=$('.card-list',f);visibleCards.forEach(card=>list.append(renderCard(card,col.tags||[])));
+  $('.add-card-btn',f).hidden=!canEdit()||state.completedView;
+  if(!canEdit()||state.completedView){$('.column-grip',f).hidden=true}
+  if(!canEdit())$('.column-menu-btn',f).hidden=true;
   boardEl.append(f);
  });
- applySearch();bindBoardEvents();if(canEdit())initSortables();icons();
+ applySearch();bindBoardEvents();if(canEdit()&&!state.completedView)initSortables();icons();
 }
 function tagPill(tag){const e=document.createElement('span');e.className='tag-pill';const d=document.createElement('span');d.className='tag-dot';d.style.setProperty('--tag-color',tag.color);const n=document.createElement('span');n.textContent=tag.name;e.append(d,n);return e}
 function dueState(value){
@@ -92,22 +98,25 @@ function dueState(value){
 }
 function renderCard(card,columnTags=[]){
  const f=$('#cardTemplate').content.cloneNode(true),el=$('.task-card',f),mix=tagMix(columnTags);el.dataset.cardId=card.id;el.dataset.label=card.label||'';el.style.setProperty('--card-tag-bg',mix.card);$('.task-title',f).textContent=card.title;
+ if(card.completed)el.classList.add('completed-card');
  const desc=$('.task-description',f);if(card.description){desc.textContent=card.description;desc.hidden=false}
  const lab=$('.task-label',f);if(card.label){lab.textContent=({magenta:'Focus',amber:'Attesa',teal:'Pronto',blue:'Info',violet:'Idea'})[card.label]||card.label;lab.hidden=false}
  const people=$('.task-assignees',f);if(card.assignees?.length){card.assignees.forEach(u=>{const pill=document.createElement('span');pill.className='assignee-pill';pill.textContent='@'+u.username;pill.title='Assegnato a @'+u.username;people.append(pill)});people.hidden=false}
- const due=$('.task-due',f);if(card.due_date){const st=dueState(card.due_date);$('span',due).textContent=(st?.label?st.label+' · ':'')+new Intl.DateTimeFormat('it-IT',{day:'numeric',month:'short'}).format(new Date(card.due_date+'T12:00:00'));due.hidden=false;const ic=$('.task-due-icon',due);ic.setAttribute('data-lucide',st?.icon||'calendar-days');if(st?.className)el.classList.add(st.className)}
+ const due=$('.task-due',f);if(card.due_date){const st=card.completed?null:dueState(card.due_date);$('span',due).textContent=(st?.label?st.label+' · ':'')+new Intl.DateTimeFormat('it-IT',{day:'numeric',month:'short'}).format(new Date(card.due_date+'T12:00:00'));due.hidden=false;const ic=$('.task-due-icon',due);ic.setAttribute('data-lucide',st?.icon||'calendar-days');if(st?.className)el.classList.add(st.className)}
  const ac=$('.attachment-count',f);if(card.attachments?.length){$('span',ac).textContent=card.attachments.length;ac.hidden=false}
- if(!canEdit())$('.card-edit',f).hidden=true;return f;
+ const quick=$('.card-complete',f);quick.title=card.completed?'Riapri card':'Segna come fatto';quick.setAttribute('aria-label',quick.title);$('i',quick).setAttribute('data-lucide',card.completed?'rotate-ccw':'circle-check-big');
+ if(!canEdit()){$('.card-edit',f).hidden=true;quick.hidden=true}
+ return f;
 }
 
 function bindGlobalEvents(){
  $('#workspaceSelect').addEventListener('change',e=>selectWorkspace(Number(e.target.value)));$('#newWorkspaceBtn').addEventListener('click',()=>openWorkspaceDialog());$('#editWorkspaceBtn').addEventListener('click',()=>openWorkspaceDialog(state.workspace));$('#refreshBtn').addEventListener('click',()=>loadWorkspace());$('#addColumnBtn').addEventListener('click',()=>openColumnDialog());$('#emptyAddColumnBtn').addEventListener('click',()=>openColumnDialog());
  $('#adminBtn').addEventListener('click',openAdmin);$('#userChip').addEventListener('click',openProfile);$('#logoutBtn').addEventListener('click',async()=>{try{await api('logout',{body:{}})}catch{}location.reload()});
- $('#searchInput').addEventListener('input',e=>{state.search=e.target.value.trim().toLowerCase();applySearch()});
+ $('#searchInput').addEventListener('input',e=>{state.search=e.target.value.trim().toLowerCase();applySearch()});$('#completedViewToggle').addEventListener('change',e=>{state.completedView=e.target.checked;renderWorkspace()});
  $('#showLoginBtn').addEventListener('click',()=>toggleAuth('login'));$('#showRegisterBtn').addEventListener('click',()=>toggleAuth('register'));$('#showRecoverBtn').addEventListener('click',()=>toggleAuth('recover'));$('#backToLoginBtn').addEventListener('click',()=>toggleAuth('login'));
  $('#loginForm').addEventListener('submit',login);$('#registerForm').addEventListener('submit',register);$('#recoverForm').addEventListener('submit',recoverAdmin);
  $('#workspaceForm').addEventListener('submit',saveWorkspace);$('#columnForm').addEventListener('submit',saveColumn);$('#manageTagsBtn').addEventListener('click',openTagManager);$('#tagForm').addEventListener('submit',saveTag);$('#cancelTagEditBtn').addEventListener('click',resetTagForm);
- $('#cardForm').addEventListener('submit',saveCard);$('#archiveCardBtn').addEventListener('click',archiveCurrentCard);$('#cardFiles').addEventListener('change',renderSelectedFiles);
+ $('#cardForm').addEventListener('submit',saveCard);$('#completeCardBtn').addEventListener('click',completeCurrentCard);$('#archiveCardBtn').addEventListener('click',archiveCurrentCard);$('#cardFiles').addEventListener('change',renderSelectedFiles);
  $('#profileForm').addEventListener('submit',changeOwnPassword);$('#resetPasswordForm').addEventListener('submit',resetUserPassword);$('#siteSettingsForm').addEventListener('submit',saveSiteSettings);
  $('#memberSearch').addEventListener('input',()=>{clearTimeout(state.memberTimer);state.memberTimer=setTimeout(loadMembers,220)});
  $$('.dialog-close,.dialog-cancel').forEach(b=>b.addEventListener('click',()=>b.closest('dialog').close()));document.addEventListener('click',e=>{if(!e.target.closest('.column-menu-wrap'))closePopovers()});document.addEventListener('keydown',e=>{if(e.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){e.preventDefault();$('#searchInput').focus()}if(e.key==='Escape')closePopovers()});
@@ -123,7 +132,8 @@ function bindBoardEvents(){
  $$('.column-menu-btn',boardEl).forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();const p=$('.column-popover',b.closest('.column-menu-wrap')),open=p.hidden;closePopovers();p.hidden=!open}));
  $$('[data-action="rename-column"]',boardEl).forEach(b=>b.addEventListener('click',()=>{const c=findColumn(b.closest('.column').dataset.columnId);closePopovers();openColumnDialog(c)}));
  $$('[data-action="delete-column"]',boardEl).forEach(b=>b.addEventListener('click',async()=>{const id=b.closest('.column').dataset.columnId,c=findColumn(id);closePopovers();if(!confirm('Eliminare la colonna "'+c.name+'" e tutte le sue card?'))return;try{await api('column:delete',{body:{workspace_id:state.workspace.id,id}});await loadWorkspace();toast('Colonna eliminata.')}catch(e){toast(e.message,'error')}}));
- $$('.task-card',boardEl).forEach(el=>{const open=()=>{const c=findCard(el.dataset.cardId);openCardDialog(c,c.column_id)};el.addEventListener('click',open);el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open()}})});
+ $$('.card-complete',boardEl).forEach(b=>b.addEventListener('click',async e=>{e.stopPropagation();const card=findCard(b.closest('.task-card').dataset.cardId);if(card)await setCardCompleted(card.id,!card.completed)}));
+ $$('.task-card',boardEl).forEach(el=>{const open=e=>{if(e?.target?.closest('.task-quick-actions'))return;const card=findCard(el.dataset.cardId);openCardDialog(card,card.column_id)};el.addEventListener('click',open);el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open(e)}})});
 }
 function initSortables(){if(!window.Sortable)return;state.columnSortable=new Sortable(boardEl,{animation:160,handle:'.column-grip',draggable:'.column',ghostClass:'sortable-ghost',onEnd:async()=>{const ids=$$('.column',boardEl).map(e=>Number(e.dataset.columnId));try{await api('column:reorder',{body:{workspace_id:state.workspace.id,ids}});await loadWorkspace()}catch(e){toast(e.message,'error');await loadWorkspace()}}});$$('.card-list',boardEl).forEach(list=>state.cardSortables.push(new Sortable(list,{group:'cards',animation:150,draggable:'.task-card',ghostClass:'sortable-ghost',emptyInsertThreshold:28,onEnd:async ev=>{try{await api('card:move',{body:{workspace_id:state.workspace.id,id:Number(ev.item.dataset.cardId),from_column_id:Number(ev.from.closest('.column').dataset.columnId),to_column_id:Number(ev.to.closest('.column').dataset.columnId),new_index:ev.newIndex}});await loadWorkspace()}catch(e){toast(e.message,'error');await loadWorkspace()}}})))}
 function destroySortables(){state.cardSortables.forEach(s=>s.destroy());state.cardSortables=[];if(state.columnSortable){state.columnSortable.destroy();state.columnSortable=null}}
@@ -150,13 +160,15 @@ function renderAssigneeChoices(selected=[]){
  if(!users.length){box.innerHTML='<span class="empty-list">Nessun utente disponibile nel workspace.</span>';return}
  users.forEach(u=>{const lab=document.createElement('label');lab.className='assignee-choice';const input=document.createElement('input');input.type='checkbox';input.value=u.id;input.checked=chosen.has(Number(u.id));const avatar=document.createElement('span');avatar.className='assignee-avatar';avatar.textContent=(u.username||'?')[0].toUpperCase();const name=document.createElement('span');name.textContent='@'+u.username;lab.append(input,avatar,name);box.append(lab)});
 }
-function openCardDialog(card=null,columnId){const col=findColumn(columnId||card?.column_id);$('#cardId').value=card?.id||'';$('#cardColumnId').value=col?.id||'';$('#cardTitle').value=card?.title||'';$('#cardDescription').value=card?.description||'';$('#cardLabel').value=card?.label||'';$('#cardDueDate').value=card?.due_date||'';$('#cardColumnLabel').textContent=col?.name||'Card';$('#cardDialogTitle').textContent=card?'Dettaglio attività':'Nuova attività';$('#archiveCardBtn').hidden=!card||!canEdit();$('#saveCardBtn').hidden=!canEdit();$('#attachmentUploadField').hidden=!canEdit();$('#cardFiles').value='';$('#selectedFiles').innerHTML='';renderAttachments(card?.attachments||[]);renderAssigneeChoices(card?.assignees||[]);$('#cardForm input,#cardForm textarea,#cardForm select').forEach(i=>{if(!['cardId','cardColumnId','cardFiles'].includes(i.id))i.disabled=!canEdit()});$('#cardDialog').showModal();if(canEdit())setTimeout(()=>$('#cardTitle').focus(),30)}
+function openCardDialog(card=null,columnId){const col=findColumn(columnId||card?.column_id);$('#cardId').value=card?.id||'';$('#cardColumnId').value=col?.id||'';$('#cardTitle').value=card?.title||'';$('#cardDescription').value=card?.description||'';$('#cardLabel').value=card?.label||'';$('#cardDueDate').value=card?.due_date||'';$('#cardColumnLabel').textContent=col?.name||'Card';$('#cardDialogTitle').textContent=card?'Dettaglio attività':'Nuova attività';$('#archiveCardBtn').hidden=!card||!canEdit();$('#completeCardBtn').hidden=!card||!canEdit();if(card){$('#completeCardBtn span').textContent=card.completed?'Riapri':'Segna fatto';$('#completeCardBtn i').setAttribute('data-lucide',card.completed?'rotate-ccw':'circle-check-big')}$('#saveCardBtn').hidden=!canEdit();$('#attachmentUploadField').hidden=!canEdit();$('#cardFiles').value='';$('#selectedFiles').innerHTML='';renderAttachments(card?.attachments||[]);renderAssigneeChoices(card?.assignees||[]);$('#cardForm input,#cardForm textarea,#cardForm select').forEach(i=>{if(!['cardId','cardColumnId','cardFiles'].includes(i.id))i.disabled=!canEdit()});$('#cardDialog').showModal();icons();if(canEdit())setTimeout(()=>$('#cardTitle').focus(),30)}
 function humanSize(bytes){if(bytes<1024)return bytes+' B';if(bytes<1024*1024)return(Math.round(bytes/102.4)/10)+' KB';return(Math.round(bytes/1024/102.4)/10)+' MB'}
 function renderAttachments(items){const box=$('#attachmentList');box.innerHTML='';if(!items.length){box.innerHTML='<div class="empty-list">Nessun allegato.</div>';return}items.forEach(a=>{const row=document.createElement('div');row.className='attachment-row';const main=document.createElement('div');main.className='attachment-main';const icon=document.createElement('i');icon.setAttribute('data-lucide','file');const name=document.createElement('a');name.className='attachment-name';name.textContent=a.name;name.href=API+'?action=attachment:download&id='+encodeURIComponent(a.id);name.target='_blank';name.rel='noopener';const size=document.createElement('span');size.className='attachment-size';size.textContent=humanSize(a.size);main.append(icon,name,size);const acts=document.createElement('div');acts.className='attachment-actions';if(canEdit()){const del=document.createElement('button');del.className='tiny-btn danger';del.type='button';del.textContent='Rimuovi';del.onclick=()=>deleteAttachment(a.id);acts.append(del)}row.append(main,acts);box.append(row)});icons()}
 function renderSelectedFiles(){const box=$('#selectedFiles');box.innerHTML='';[...$('#cardFiles').files].forEach(f=>{const row=document.createElement('div');row.className='selected-file';row.textContent=f.name+' · '+humanSize(f.size);box.append(row)})}
 async function uploadAttachments(cardId,files){if(!files.length)return;const fd=new FormData();fd.append('workspace_id',state.workspace.id);fd.append('card_id',cardId);files.forEach(f=>fd.append('files[]',f));const res=await fetch(API+'?action=attachment:upload',{method:'POST',credentials:'same-origin',body:fd,headers:{Accept:'application/json'}});let data;try{data=await res.json()}catch{throw new Error('Risposta upload non valida.')}if(!res.ok||!data.ok)throw new Error(data.error||'Upload non riuscito.')}
 async function deleteAttachment(id){if(!confirm('Rimuovere questo allegato?'))return;try{await api('attachment:delete',{body:{id}});await loadWorkspace();const c=findCard($('#cardId').value);renderAttachments(c?.attachments||[])}catch(e){toast(e.message,'error')}}
 async function saveCard(e){e.preventDefault();if(!canEdit())return;const id=$('#cardId').value,files=[...$('#cardFiles').files],body={workspace_id:state.workspace.id,column_id:$('#cardColumnId').value,title:$('#cardTitle').value.trim(),description:$('#cardDescription').value.trim(),label:$('#cardLabel').value,due_date:$('#cardDueDate').value||null,assignee_ids:$('#cardAssigneeChoices input:checked').map(i=>Number(i.value))};if(id)body.id=id;try{setBusy(true);const d=await api(id?'card:update':'card:create',{body});const cardId=id?Number(id):Number(d.id);if(files.length)await uploadAttachments(cardId,files);$('#cardDialog').close();await loadWorkspace();toast(files.length?'Card e allegati salvati.':'Card salvata.')}catch(x){toast(x.message,'error')}finally{setBusy(false)}}
+async function setCardCompleted(id,completed){try{await api('card:complete',{body:{workspace_id:state.workspace.id,id,completed}});await loadWorkspace();toast(completed?'Card completata.':'Card riaperta.')}catch(x){toast(x.message,'error')}}
+async function completeCurrentCard(){const id=Number($('#cardId').value);if(!id)return;const card=findCard(id);if(!card)return;$('#cardDialog').close();await setCardCompleted(id,!card.completed)}
 async function archiveCurrentCard(){const id=$('#cardId').value;if(!id||!confirm('Archiviare questa card?'))return;try{await api('card:archive',{body:{workspace_id:state.workspace.id,id}});$('#cardDialog').close();await loadWorkspace()}catch(x){toast(x.message,'error')}}
 
 function openProfile(){$('#profileTitle').textContent='@'+state.user.username;$('#profileCurrentPassword').value=$('#profileNewPassword').value=$('#profileNewPassword2').value='';$('#profileError').hidden=true;$('#profileDialog').showModal()}
