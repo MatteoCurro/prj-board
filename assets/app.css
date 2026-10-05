@@ -59,3 +59,33 @@ button,input,textarea,select{font:inherit}button{color:inherit}button:focus-visi
   .board-actions .icon-btn{order:2;flex:0 0 40px}
   .task-topline{min-height:30px}
 }
+
+
+/* v1.1 — filters, profile and mobile polish */
+.quick-filter-bar{display:flex;align-items:center;gap:6px;margin:-4px 0 14px;overflow-x:auto;scrollbar-width:none}.quick-filter-bar::-webkit-scrollbar{display:none}.quick-filter{height:32px;display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;border:1px solid var(--border-soft);border-radius:999px;padding:0 10px;background:rgba(255,255,255,.018);color:var(--muted);font-size:10px;font-weight:650;cursor:pointer}.quick-filter svg{width:13px}.quick-filter:hover{color:var(--text);background:var(--surface-2)}.quick-filter.active{color:#ffd6e3;border-color:rgba(219,43,100,.38);background:rgba(182,23,75,.14)}
+.card-drag-handle{display:none;width:28px;height:28px;border-radius:9px;align-items:center;justify-content:center;color:var(--muted-2);cursor:grab}.card-drag-handle svg{width:14px}.card-drag-handle:active{cursor:grabbing}
+.profile-password-section{margin-top:20px;padding-top:18px;border-top:1px solid var(--border-soft)}.compact-section{margin-bottom:4px}.compact-section h3{margin:0;font-family:"Bricolage Grotesque";font-size:15px}.compact-section p{margin:3px 0 0;color:var(--muted);font-size:10px}
+
+@media (pointer:coarse){
+  .card-drag-handle{display:flex}
+  .task-card{cursor:default}
+  .task-quick-actions .ghost-icon,.card-drag-handle{width:36px;height:36px;border-radius:10px}
+  .task-quick-actions .ghost-icon svg,.card-drag-handle svg{width:16px}
+}
+
+@media(max-width:620px){
+  .workspace{padding-left:10px;padding-right:10px}
+  .quick-filter-bar{margin:0 0 12px;padding:0 2px}
+  .quick-filter{height:36px;padding:0 12px;font-size:10.5px}
+  .board{gap:10px;padding-left:0;padding-right:0;scroll-padding:0 2px}
+  .column{flex:0 0 calc(100vw - 28px);max-width:calc(100vw - 28px);padding:9px}
+  .task-card-body{padding:11px}
+  .task-assignees{gap:3px}
+  .assignee-pill{max-width:110px}
+  .card-modal{max-width:calc(100vw - 10px)}
+  .card-modal .modal-card{max-height:calc(100dvh - 12px);overflow:auto;padding:15px 15px 0}
+  .card-modal .modal-head{position:sticky;top:-15px;z-index:4;background:#1a1d18;padding:15px 0 10px;margin-bottom:4px}
+  .card-modal .modal-actions{position:sticky;bottom:0;z-index:5;background:linear-gradient(to top,#1a1d18 78%,rgba(26,29,24,.92));border-top:1px solid var(--border-soft);margin:18px -15px 0;padding:12px 15px 14px}
+  .card-modal .modal-actions.split>div{width:100%;justify-content:flex-end}
+  .profile-modal-card{max-height:calc(100dvh - 20px);overflow:auto}
+}
