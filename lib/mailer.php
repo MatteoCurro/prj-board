@@ -80,6 +80,37 @@ function prj_mail_html_document(string $title, string $body): string {
         . '</div></body></html>';
 }
 
+function prj_php_mail_send(array $config, string $to, string $subject, string $html): array {
+    if (!function_exists('mail')) {
+        throw new RuntimeException('PHP mail() non disponibile.');
+    }
+
+    $from = trim((string)($config['mail_from'] ?? 'prj@curromatteo.it'));
+    $fromName = trim((string)($config['mail_from_name'] ?? 'PRJ'));
+    $headers = [
+        'From: ' . prj_mail_header($fromName) . ' <' . $from . '>',
+        'MIME-Version: 1.0',
+        'Content-Type: text/html; charset=UTF-8',
+        'Content-Transfer-Encoding: 8bit',
+        'X-Mailer: PRJ Board',
+    ];
+
+    $ok = @mail($to, prj_mail_header($subject), $html, implode("\r\n", $headers));
+    if (!$ok) throw new RuntimeException('Il trasporto PHP mail() ha rifiutato il messaggio.');
+    return ['ok' => true, 'recipient' => $to, 'transport' => 'php-mail', 'response' => 'mail() accepted'];
+}
+
+function prj_email_transport_probe(array $config): array {
+    $smtp = prj_smtp_probe($config);
+    if (!empty($smtp['ok'])) {
+        return ['ok' => true, 'transport' => 'smtp', 'smtp' => $smtp];
+    }
+    if (function_exists('mail')) {
+        return ['ok' => true, 'transport' => 'php-mail', 'smtp' => $smtp];
+    }
+    return ['ok' => false, 'transport' => 'none', 'smtp' => $smtp];
+}
+
 function prj_send_mail(array $config, string $to, string $subject, string $html, string $text = ''): array {
     $to = trim($to);
     $from = trim((string)($config['mail_from'] ?? 'prj@curromatteo.it'));
@@ -92,6 +123,7 @@ function prj_send_mail(array $config, string $to, string $subject, string $html,
     }
 
     $socket = null;
+    $smtpError = null;
     try {
         $socket = prj_smtp_open($config);
         prj_smtp_command($socket, 'MAIL FROM:<' . $from . '>', [250]);
@@ -128,9 +160,17 @@ function prj_send_mail(array $config, string $to, string $subject, string $html,
         try { prj_smtp_command($socket, 'QUIT', [221, 250]); } catch (Throwable) {}
         fclose($socket);
 
-        return ['ok' => true, 'recipient' => $to, 'response' => $accepted['text']];
+        return ['ok' => true, 'recipient' => $to, 'transport' => 'smtp', 'response' => $accepted['text']];
     } catch (Throwable $e) {
+        $smtpError = $e->getMessage();
         if (is_resource($socket)) fclose($socket);
-        throw $e;
     }
+
+    if (($config['mail_fallback_php'] ?? true) && function_exists('mail')) {
+        $result = prj_php_mail_send($config, $to, $subject, $html);
+        $result['smtp_error'] = $smtpError;
+        return $result;
+    }
+
+    throw new RuntimeException('Invio SMTP fallito: ' . ($smtpError ?: 'errore sconosciuto'));
 }
