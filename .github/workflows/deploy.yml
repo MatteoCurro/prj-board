@@ -27,6 +27,8 @@ jobs:
       DB_USER: ${{ secrets.DB_USER }}
       DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
       APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
       DB_NAME: prj_cur
       REMOTE_ROOT: /lamp0/web/vhosts/prj.curromatteo.it
       REMOTE_PATH: /lamp0/web/vhosts/prj.curromatteo.it/htdocs
@@ -121,6 +123,13 @@ jobs:
           def php_string(value: str) -> str:
               return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
+          smtp_user = os.environ.get("SMTP_USER", "").strip()
+          smtp_password = os.environ.get("SMTP_PASSWORD", "")
+          if bool(smtp_user) != bool(smtp_password):
+              raise SystemExit("SMTP_USER and SMTP_PASSWORD must be configured together.")
+          use_authenticated_smtp = bool(smtp_user and smtp_password)
+          sender = smtp_user if use_authenticated_smtp else "prj@curromatteo.it"
+
           config = """<?php
           return [
               'db_host' => %s,
@@ -130,17 +139,30 @@ jobs:
               'db_pass' => %s,
               'app_password' => %s,
               'app_url' => 'https://prj.curromatteo.it',
-              'mail_from' => 'prj@curromatteo.it',
+              'mail_from' => %s,
               'mail_from_name' => 'PRJ',
-              'smtp_host' => 'localhost',
-              'smtp_port' => 25,
+              'mail_transport' => %s,
+              'smtp_host' => %s,
+              'smtp_port' => %d,
               'smtp_helo' => 'prj.curromatteo.it',
               'smtp_timeout' => 8,
-              'mail_fallback_php' => true,
+              'smtp_user' => %s,
+              'smtp_pass' => %s,
+              'mail_fallback_php' => false,
           ];
-          """ % tuple(php_string(os.environ[key]) for key in [
-              "DB_HOST", "DB_NAME", "DB_USER", "DB_PASSWORD", "APP_PASSWORD"
-          ])
+          """ % (
+              php_string(os.environ["DB_HOST"]),
+              php_string(os.environ["DB_NAME"]),
+              php_string(os.environ["DB_USER"]),
+              php_string(os.environ["DB_PASSWORD"]),
+              php_string(os.environ["APP_PASSWORD"]),
+              php_string(sender),
+              php_string("smtp" if use_authenticated_smtp else "php-mail"),
+              php_string("ssl://mail.gandi.net" if use_authenticated_smtp else "localhost"),
+              465 if use_authenticated_smtp else 25,
+              php_string(smtp_user),
+              php_string(smtp_password),
+          )
 
           Path("/tmp/prj-config.php").write_text(config, encoding="utf-8")
           PY
@@ -263,16 +285,24 @@ jobs:
 
           node - <<'NODE'
           const x = require('/tmp/prj-health.json');
-          console.log('Health flags:', {ok:x.ok,schema:x.schema,has_workspace:x.has_workspace,has_column:x.has_column,uploads_writable:x.uploads_writable,mail_available:x.mail_available,smtp_available:x.smtp_available,smtp_ms:x.smtp_ms,email_transport_available:x.email_transport_available,email_transport:x.email_transport});
+          console.log('Health flags:', {ok:x.ok,schema:x.schema,has_workspace:x.has_workspace,has_column:x.has_column,uploads_writable:x.uploads_writable,mail_available:x.mail_available,smtp_available:x.smtp_available,smtp_ms:x.smtp_ms,smtp_error:x.smtp_error,email_transport_available:x.email_transport_available,email_transport:x.email_transport});
           if (!x.ok || x.schema !== '1.4' || !x.has_workspace || !x.has_column || !x.uploads_writable || !x.mail_available || !x.email_transport_available) process.exit(1);
           console.log('PRJ health OK: schema 1.4, private uploads writable, email transport='+x.email_transport+'.');
           NODE
 
           SPF="$(dig +short TXT curromatteo.it 2>/dev/null | tr -d '"' || true)"
-          if printf '%s' "$SPF" | grep -Fq '_spf.gpaas.net'; then
-            echo "SPF check OK: Gandi Web Hosting is authorized."
+          if [ -n "${SMTP_USER:-}" ]; then
+            if printf '%s' "$SPF" | grep -Fq '_mailcust.gandi.net'; then
+              echo "SPF check OK: Gandi Mail is authorized."
+            else
+              echo "::warning::SPF for curromatteo.it does not visibly include _mailcust.gandi.net. Authenticated Gandi Mail can accept messages that recipients later reject."
+            fi
           else
-            echo "::warning::SPF for curromatteo.it does not visibly include _spf.gpaas.net. SMTP can work, but deliverability may be reduced."
+            if printf '%s' "$SPF" | grep -Fq '_spf.gpaas.net'; then
+              echo "SPF check OK: Gandi Web Hosting is authorized."
+            else
+              echo "::warning::SPF for curromatteo.it does not visibly include _spf.gpaas.net. PHP mail() can accept messages that recipients later reject."
+            fi
           fi
 
           echo "PRJ Board deployed and health-checked: https://prj.curromatteo.it/"
