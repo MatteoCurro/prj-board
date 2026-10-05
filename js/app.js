@@ -394,7 +394,7 @@ async function sendTestEmail(){
   await persistProfileFromForm();
   const d=await api('email:test',{body:{}});
   const diag=d.diagnostic||{},runtime=diag.runtime||{},sendmail=diag.sendmail||null,steps=(diag.transcript||[]).map(x=>x.step+' '+(x.code||'?')).join(' → ');
-  const runtimeInfo=' sendmail_path='+(runtime.sendmail_path||'(vuoto)')+'; SMTP='+((runtime.smtp_ini||'(vuoto)'))+':'+((runtime.smtp_port_ini||'(vuoto)'))+'; mail.log='+(runtime.mail_log||'(vuoto)')+'.';
+  const runtimeInfo=' sendmail_path='+(runtime.sendmail_path||'(vuoto)')+'; realpath='+(runtime.sendmail_realpath||'(non risolto)')+'; SMTP='+((runtime.smtp_ini||'(vuoto)'))+':'+((runtime.smtp_port_ini||'(vuoto)'))+'; mail.log='+(runtime.mail_log||'(vuoto)')+'.';
   if(sendmail&&sendmail.attempted){
    const out=(sendmail.stderr||sendmail.stdout||'nessun output').replace(/\s+/g,' ').trim();
    status.textContent='localhost:25: '+(diag.error||'non disponibile')+'. Wrapper PHP/sendmail eseguito: exit '+sendmail.exit_code+'. '+out+'.'+runtimeInfo;
