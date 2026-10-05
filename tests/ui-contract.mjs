@@ -25,7 +25,7 @@ const requiredBindings = [
   ["#cardForm submit", "$('#cardForm').addEventListener('submit',saveCard)"],
   ["profile submit", "$('#profileForm').addEventListener('submit',saveProfile)"],
   ["profile password submit", "$('#profilePasswordForm').addEventListener('submit',changeOwnPassword)"],
-  ["quick filters", "$('.quick-filter').forEach"],
+  ["quick filters", "$$('.quick-filter').forEach"],
   ["add card click", "$$('.add-card-btn',boardEl).forEach"],
   ["complete card click", "$$('.card-complete',boardEl).forEach"],
   ["edit card click", "$$('.card-edit',boardEl).forEach"],
@@ -36,7 +36,6 @@ const requiredBindings = [
   ["column form submit", "$('#columnForm').addEventListener('submit',saveColumn)"],
   ["workspace form submit", "$('#workspaceForm').addEventListener('submit',saveWorkspace)"],
   ["tag form submit", "$('#tagForm').addEventListener('submit',saveTag)"],
-  ["profile form submit", "$('#profileForm').addEventListener('submit',changeOwnPassword)"],
   ["admin reset submit", "$('#resetPasswordForm').addEventListener('submit',resetUserPassword)"],
   ["site settings submit", "$('#siteSettingsForm').addEventListener('submit',saveSiteSettings)"],
 ];
