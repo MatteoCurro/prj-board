@@ -162,6 +162,29 @@ function syncCardAssignees(PDO $pdo, int $workspaceId, int $cardId, array $userI
         foreach ($userIds as $userId) $insert->execute([$cardId, $userId]);
     }
 }
+function syncCardChecklist(PDO $pdo, int $cardId, array $items): void {
+    if (count($items) > 100) fail('La checklist può contenere al massimo 100 elementi.');
+
+    $clean = [];
+    foreach ($items as $item) {
+        if (!is_array($item)) continue;
+        $text = cleanText($item['text'] ?? '', 240);
+        if ($text === '') continue;
+        $clean[] = ['text' => $text, 'done' => !empty($item['done']) ? 1 : 0];
+    }
+
+    $pdo->prepare("DELETE FROM card_checklist WHERE card_id = ?")->execute([$cardId]);
+    if (!$clean) return;
+
+    $insert = $pdo->prepare("
+        INSERT INTO card_checklist (card_id, item_text, is_done, position)
+        VALUES (?, ?, ?, ?)
+    ");
+    foreach ($clean as $index => $item) {
+        $insert->execute([$cardId, $item['text'], $item['done'], ($index + 1) * 1000]);
+    }
+}
+
 function cardWorkspaceId(PDO $pdo, int $cardId): ?int {
     $stmt = $pdo->prepare("
         SELECT bc.board_id
@@ -248,6 +271,7 @@ function workspacePayload(PDO $pdo, int $workspaceId, string $role): array {
     $cardsByColumn = [];
     $attachmentsByCard = [];
     $assigneesByCard = [];
+    $checklistByCard = [];
 
     if ($columns) {
         $columnIds = array_map(fn($c) => (int)$c['id'], $columns);
@@ -270,7 +294,7 @@ function workspacePayload(PDO $pdo, int $workspaceId, string $role): array {
         }
 
         $stmt = $pdo->prepare("
-            SELECT id, column_id, title, description, label, due_date, position, completed, completed_at, updated_at
+            SELECT id, column_id, title, description, label, due_date, priority, position, completed, completed_at, updated_at
             FROM cards
             WHERE archived = 0 AND column_id IN ($marks)
             ORDER BY column_id, completed, position, id
@@ -315,6 +339,22 @@ function workspacePayload(PDO $pdo, int $workspaceId, string $role): array {
                     'display_name' => $a['display_name'],
                 ];
             }
+
+            $checklistStmt = $pdo->prepare("
+                SELECT id, card_id, item_text, is_done, position
+                FROM card_checklist
+                WHERE card_id IN ($cardMarks)
+                ORDER BY card_id, position, id
+            ");
+            $checklistStmt->execute($cardIds);
+            foreach ($checklistStmt->fetchAll() as $item) {
+                $checklistByCard[(int)$item['card_id']][] = [
+                    'id' => (int)$item['id'],
+                    'text' => $item['item_text'],
+                    'done' => (bool)$item['is_done'],
+                    'position' => (int)$item['position'],
+                ];
+            }
         }
 
         foreach ($cards as $card) {
@@ -324,6 +364,7 @@ function workspacePayload(PDO $pdo, int $workspaceId, string $role): array {
             $card['completed'] = (bool)$card['completed'];
             $card['attachments'] = $attachmentsByCard[$card['id']] ?? [];
             $card['assignees'] = $assigneesByCard[$card['id']] ?? [];
+            $card['checklist'] = $checklistByCard[$card['id']] ?? [];
             $cardsByColumn[$card['column_id']][] = $card;
         }
     }
@@ -371,7 +412,7 @@ $action = (string)($_GET['action'] ?? 'status');
 
 if ($setupRequired) {
     if ($action === 'status') {
-        reply(['ok' => true, 'setup_required' => true, 'authenticated' => false, 'version' => '1.3.0']);
+        reply(['ok' => true, 'setup_required' => true, 'authenticated' => false, 'version' => '1.4.0']);
     }
     fail('Configurazione server incompleta.', 503);
 }
@@ -444,6 +485,9 @@ try {
     }
     if (!columnExists($pdo, 'cards', 'completed_at')) {
         $pdo->exec("ALTER TABLE cards ADD COLUMN completed_at DATETIME NULL AFTER completed");
+    }
+    if (!columnExists($pdo, 'cards', 'priority')) {
+        $pdo->exec("ALTER TABLE cards ADD COLUMN priority VARCHAR(16) NOT NULL DEFAULT 'normal' AFTER due_date");
     }
 
     $pdo->exec("
@@ -563,6 +607,21 @@ try {
     ");
 
     $pdo->exec("
+        CREATE TABLE IF NOT EXISTS card_checklist (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            card_id INT UNSIGNED NOT NULL,
+            item_text VARCHAR(240) NOT NULL,
+            is_done TINYINT(1) NOT NULL DEFAULT 0,
+            position INT NOT NULL DEFAULT 1000,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_checklist_card_position (card_id, position, id),
+            CONSTRAINT fk_checklist_card FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
         CREATE TABLE IF NOT EXISTS digest_logs (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             user_id INT UNSIGNED NOT NULL,
@@ -616,7 +675,7 @@ if ($action === 'health') {
     $smtp = $transport['smtp'] ?? [];
     reply([
         'ok' => true,
-        'schema' => '1.3',
+        'schema' => '1.4',
         'has_workspace' => (bool)$pdo->query("SELECT 1 FROM boards LIMIT 1")->fetchColumn(),
         'has_column' => (bool)$pdo->query("SELECT 1 FROM board_columns LIMIT 1")->fetchColumn(),
         'mail_available' => function_exists('mail'),
@@ -625,7 +684,7 @@ if ($action === 'health') {
         'email_transport_available' => (bool)($transport['ok'] ?? false),
         'email_transport' => $transport['transport'] ?? 'none',
         'uploads_writable' => is_dir($uploadsRoot) && is_writable($uploadsRoot),
-        'version' => '1.3.0',
+        'version' => '1.4.0',
     ]);
 }
 
@@ -645,7 +704,7 @@ if ($action === 'status') {
             'has_admin' => $adminExists,
             'challenge' => ['question' => "$a + $b"],
             'site' => $site,
-            'version' => '1.3.0',
+            'version' => '1.4.0',
         ]);
     }
 
@@ -656,7 +715,7 @@ if ($action === 'status') {
         'user' => $user,
         'workspaces' => workspaceList($pdo, $user),
         'site' => $site,
-        'version' => '1.3.0',
+        'version' => '1.4.0',
     ]);
 }
 
@@ -790,6 +849,36 @@ try {
             $workspaceId = intId($_GET['workspace_id'] ?? $_GET['board_id'] ?? null);
             $role = requireWorkspaceRole($pdo, $user, $workspaceId, ['viewer', 'editor', 'admin']);
             reply(['ok' => true, 'workspace' => workspacePayload($pdo, $workspaceId, $role)]);
+        }
+
+        case 'my:tasks': {
+            $stmt = $pdo->prepare("
+                SELECT c.id, c.column_id, c.title, c.description, c.due_date, c.priority, c.updated_at,
+                       bc.name column_name, b.id workspace_id, b.name workspace_name, b.logo_url workspace_logo_url,
+                       (SELECT COUNT(*) FROM card_checklist ci WHERE ci.card_id = c.id) checklist_total,
+                       (SELECT COUNT(*) FROM card_checklist ci WHERE ci.card_id = c.id AND ci.is_done = 1) checklist_done
+                FROM card_assignees ca
+                JOIN cards c ON c.id = ca.card_id
+                JOIN board_columns bc ON bc.id = c.column_id
+                JOIN boards b ON b.id = bc.board_id
+                WHERE ca.user_id = ?
+                  AND c.archived = 0
+                  AND c.completed = 0
+                ORDER BY (c.due_date IS NULL), c.due_date,
+                         FIELD(c.priority, 'urgent', 'high', 'normal', 'low'),
+                         b.position, bc.position, c.position, c.id
+            ");
+            $stmt->execute([$user['id']]);
+            $tasks = $stmt->fetchAll();
+            foreach ($tasks as &$task) {
+                $task['id'] = (int)$task['id'];
+                $task['column_id'] = (int)$task['column_id'];
+                $task['workspace_id'] = (int)$task['workspace_id'];
+                $task['checklist_total'] = (int)$task['checklist_total'];
+                $task['checklist_done'] = (int)$task['checklist_done'];
+            }
+            unset($task);
+            reply(['ok' => true, 'tasks' => $tasks]);
         }
 
         case 'workspace:create': {
@@ -938,8 +1027,10 @@ try {
             $description = cleanText($body['description'] ?? '', 10000);
             $label = cleanText($body['label'] ?? '', 24);
             $dueDate = !empty($body['due_date']) ? (string)$body['due_date'] : null;
+            $priority = (string)($body['priority'] ?? 'normal');
             if ($title === '') fail('Inserisci il titolo della card.');
             if ($dueDate !== null && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate)) fail('Data non valida.');
+            if (!in_array($priority, ['low', 'normal', 'high', 'urgent'], true)) fail('Priorità non valida.');
 
             $stmt = $pdo->prepare("SELECT id FROM board_columns WHERE id = ? AND board_id = ?");
             $stmt->execute([$columnId, $workspaceId]);
@@ -950,15 +1041,20 @@ try {
             $position = (int)$stmt->fetchColumn();
             $pdo->beginTransaction();
             $pdo->prepare("
-                INSERT INTO cards (column_id, title, description, label, due_date, position)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ")->execute([$columnId, $title, $description, $label, $dueDate, $position]);
+                INSERT INTO cards (column_id, title, description, label, due_date, priority, position)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ")->execute([$columnId, $title, $description, $label, $dueDate, $priority, $position]);
             $cardId = (int)$pdo->lastInsertId();
             syncCardAssignees(
                 $pdo,
                 $workspaceId,
                 $cardId,
                 is_array($body['assignee_ids'] ?? null) ? $body['assignee_ids'] : []
+            );
+            syncCardChecklist(
+                $pdo,
+                $cardId,
+                is_array($body['checklist'] ?? null) ? $body['checklist'] : []
             );
             $pdo->commit();
             reply(['ok' => true, 'id' => $cardId]);
@@ -973,22 +1069,29 @@ try {
             $description = cleanText($body['description'] ?? '', 10000);
             $label = cleanText($body['label'] ?? '', 24);
             $dueDate = !empty($body['due_date']) ? (string)$body['due_date'] : null;
+            $priority = (string)($body['priority'] ?? 'normal');
             if ($title === '') fail('Inserisci il titolo della card.');
             if ($dueDate !== null && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate)) fail('Data non valida.');
+            if (!in_array($priority, ['low', 'normal', 'high', 'urgent'], true)) fail('Priorità non valida.');
 
             $stmt = $pdo->prepare("
                 UPDATE cards c
                 JOIN board_columns bc ON bc.id = c.column_id
-                SET c.title = ?, c.description = ?, c.label = ?, c.due_date = ?
+                SET c.title = ?, c.description = ?, c.label = ?, c.due_date = ?, c.priority = ?
                 WHERE c.id = ? AND bc.board_id = ? AND c.archived = 0
             ");
             $pdo->beginTransaction();
-            $stmt->execute([$title, $description, $label, $dueDate, $id, $workspaceId]);
+            $stmt->execute([$title, $description, $label, $dueDate, $priority, $id, $workspaceId]);
             syncCardAssignees(
                 $pdo,
                 $workspaceId,
                 $id,
                 is_array($body['assignee_ids'] ?? null) ? $body['assignee_ids'] : []
+            );
+            syncCardChecklist(
+                $pdo,
+                $id,
+                is_array($body['checklist'] ?? null) ? $body['checklist'] : []
             );
             $pdo->commit();
             reply(['ok' => true]);
