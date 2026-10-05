@@ -1325,32 +1325,44 @@ try {
             $display = trim((string)($user['display_name'] ?? '')) ?: '@' . $user['username'];
             $safeDisplay = htmlspecialchars($display, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $body = '<div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#d62b64;font-weight:700">PRJ</div>'
-                . '<h1 style="font-size:22px;margin:8px 0 8px;color:#f1f3ee">Email di test</h1>'
-                . '<p style="font-size:13px;line-height:1.55;color:#a9afa4;margin:0">Ciao ' . $safeDisplay . ', questo è un test del trasporto email di PRJ. Se leggi questo messaggio, il recapito verso il tuo indirizzo funziona.</p>'
-                . '<p style="font-size:12px;line-height:1.5;color:#747a70;margin:18px 0 0">I recap automatici vengono inviati solo se hai scelto una frequenza diversa da “Disattivato”.</p>';
-            $subject = '[' . ($site['name'] ?? 'PRJ') . '] Email di test';
+                . '<h1 style="font-size:22px;margin:8px 0 8px;color:#f1f3ee">Notifica account</h1>'
+                . '<p style="font-size:13px;line-height:1.55;color:#a9afa4;margin:0">Ciao ' . $safeDisplay . ', questo messaggio verifica il percorso di consegna del relay locale di PRJ.</p>'
+                . '<p style="font-size:12px;line-height:1.5;color:#747a70;margin:18px 0 0">La diagnostica registra le risposte SMTP del relay Gandi fino alla presa in carico del messaggio.</p>';
+            $subject = '[' . ($site['name'] ?? 'PRJ') . '] Notifica account';
 
-            try {
-                $mail = prj_send_mail(
-                    $config,
-                    $recipient,
-                    $subject,
-                    prj_mail_html_document($subject, $body),
-                    "Ciao $display,\n\nQuesto è un test del trasporto email di PRJ.\n"
-                );
-                prj_digest_record($pdo, (int)$user['id'], 'test', $recipient, 'accepted', 0);
-                reply([
-                    'ok' => true,
-                    'accepted' => true,
-                    'delivery_confirmed' => false,
-                    'recipient' => $recipient,
-                    'transport' => $mail['transport'] ?? 'unknown',
-                    'response' => $mail['response'] ?? null,
-                ]);
-            } catch (Throwable $e) {
-                prj_digest_record($pdo, (int)$user['id'], 'test', $recipient, 'failed', 0, $e->getMessage());
-                fail('Invio email non riuscito: ' . $e->getMessage(), 502);
-            }
+            $mail = prj_smtp_local_diagnostic_send(
+                $config,
+                $recipient,
+                $subject,
+                prj_mail_html_document($subject, $body),
+                "Ciao $display,\n\nQuesto messaggio verifica il percorso di consegna del relay locale di PRJ.\n"
+            );
+
+            $accepted = !empty($mail['accepted']);
+            prj_digest_record(
+                $pdo,
+                (int)$user['id'],
+                'test',
+                $recipient,
+                $accepted ? 'accepted' : 'failed',
+                0,
+                $accepted ? null : (string)($mail['error'] ?? 'Relay locale non ha accettato il messaggio.')
+            );
+
+            reply([
+                'ok' => true,
+                'accepted' => $accepted,
+                'delivery_confirmed' => false,
+                'recipient' => $recipient,
+                'transport' => $mail['transport'] ?? 'smtp-local-diagnostic',
+                'response' => $mail['response'] ?? null,
+                'diagnostic' => [
+                    'relay' => $mail['relay'] ?? 'localhost:25',
+                    'stage' => $mail['stage'] ?? null,
+                    'error' => $mail['error'] ?? null,
+                    'transcript' => $mail['transcript'] ?? [],
+                ],
+            ]);
         }
 
         case 'calendar:feeds': {
