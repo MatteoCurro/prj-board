@@ -260,10 +260,10 @@ function workspacePayload(PDO $pdo, int $workspaceId, string $role): array {
         }
 
         $stmt = $pdo->prepare("
-            SELECT id, column_id, title, description, label, due_date, position, updated_at
+            SELECT id, column_id, title, description, label, due_date, position, completed, completed_at, updated_at
             FROM cards
             WHERE archived = 0 AND column_id IN ($marks)
-            ORDER BY column_id, position, id
+            ORDER BY column_id, completed, position, id
         ");
         $stmt->execute($columnIds);
         $cards = $stmt->fetchAll();
@@ -310,6 +310,7 @@ function workspacePayload(PDO $pdo, int $workspaceId, string $role): array {
             $card['id'] = (int)$card['id'];
             $card['column_id'] = (int)$card['column_id'];
             $card['position'] = (int)$card['position'];
+            $card['completed'] = (bool)$card['completed'];
             $card['attachments'] = $attachmentsByCard[$card['id']] ?? [];
             $card['assignees'] = $assigneesByCard[$card['id']] ?? [];
             $cardsByColumn[$card['column_id']][] = $card;
@@ -359,7 +360,7 @@ $action = (string)($_GET['action'] ?? 'status');
 
 if ($setupRequired) {
     if ($action === 'status') {
-        reply(['ok' => true, 'setup_required' => true, 'authenticated' => false, 'version' => '0.4.0']);
+        reply(['ok' => true, 'setup_required' => true, 'authenticated' => false, 'version' => '0.5.0']);
     }
     fail('Configurazione server incompleta.', 503);
 }
@@ -426,6 +427,13 @@ try {
             CONSTRAINT fk_cards_column FOREIGN KEY (column_id) REFERENCES board_columns(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    if (!columnExists($pdo, 'cards', 'completed')) {
+        $pdo->exec("ALTER TABLE cards ADD COLUMN completed TINYINT(1) NOT NULL DEFAULT 0 AFTER archived");
+    }
+    if (!columnExists($pdo, 'cards', 'completed_at')) {
+        $pdo->exec("ALTER TABLE cards ADD COLUMN completed_at DATETIME NULL AFTER completed");
+    }
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS users (
@@ -544,12 +552,12 @@ try {
 if ($action === 'health') {
     reply([
         'ok' => true,
-        'schema' => '0.4',
+        'schema' => '0.5',
         'has_workspace' => (bool)$pdo->query("SELECT 1 FROM boards LIMIT 1")->fetchColumn(),
         'has_column' => (bool)$pdo->query("SELECT 1 FROM board_columns LIMIT 1")->fetchColumn(),
         'mail_available' => function_exists('mail'),
         'uploads_writable' => is_dir($uploadsRoot) && is_writable($uploadsRoot),
-        'version' => '0.4.0',
+        'version' => '0.5.0',
     ]);
 }
 
@@ -569,7 +577,7 @@ if ($action === 'status') {
             'has_admin' => $adminExists,
             'challenge' => ['question' => "$a + $b"],
             'site' => $site,
-            'version' => '0.4.0',
+            'version' => '0.5.0',
         ]);
     }
 
@@ -580,7 +588,7 @@ if ($action === 'status') {
         'user' => $user,
         'workspaces' => workspaceList($pdo, $user),
         'site' => $site,
-        'version' => '0.4.0',
+        'version' => '0.5.0',
     ]);
 }
 
@@ -918,6 +926,38 @@ try {
             reply(['ok' => true]);
         }
 
+        case 'card:complete': {
+            $body = jsonBody();
+            $workspaceId = intId($body['workspace_id'] ?? null);
+            requireWorkspaceRole($pdo, $user, $workspaceId, ['editor', 'admin']);
+            $id = intId($body['id'] ?? null);
+            $completed = !empty($body['completed']) ? 1 : 0;
+
+            $stmt = $pdo->prepare("
+                UPDATE cards c
+                JOIN board_columns bc ON bc.id = c.column_id
+                SET c.completed = ?, c.completed_at = ?
+                WHERE c.id = ? AND bc.board_id = ? AND c.archived = 0
+            ");
+            $stmt->execute([
+                $completed,
+                $completed ? date('Y-m-d H:i:s') : null,
+                $id,
+                $workspaceId,
+            ]);
+            if (!$stmt->rowCount()) {
+                $check = $pdo->prepare("
+                    SELECT c.id
+                    FROM cards c
+                    JOIN board_columns bc ON bc.id = c.column_id
+                    WHERE c.id = ? AND bc.board_id = ? AND c.archived = 0
+                ");
+                $check->execute([$id, $workspaceId]);
+                if (!$check->fetchColumn()) fail('Card non trovata.', 404);
+            }
+            reply(['ok' => true, 'completed' => (bool)$completed]);
+        }
+
         case 'card:archive': {
             $body = jsonBody();
             $workspaceId = intId($body['workspace_id'] ?? null);
@@ -951,17 +991,17 @@ try {
             $stmt = $pdo->prepare("
                 SELECT c.id
                 FROM cards c JOIN board_columns bc ON bc.id = c.column_id
-                WHERE c.id = ? AND bc.board_id = ? AND c.archived = 0
+                WHERE c.id = ? AND bc.board_id = ? AND c.archived = 0 AND c.completed = 0
             ");
             $stmt->execute([$id, $workspaceId]);
-            if (!$stmt->fetchColumn()) fail('Card non trovata.', 404);
+            if (!$stmt->fetchColumn()) fail('Card attiva non trovata.', 404);
 
             $pdo->beginTransaction();
             $pdo->prepare("UPDATE cards SET column_id = ? WHERE id = ?")->execute([$toColumn, $id]);
 
             $target = $pdo->prepare("
                 SELECT id FROM cards
-                WHERE column_id = ? AND archived = 0 AND id <> ?
+                WHERE column_id = ? AND archived = 0 AND completed = 0 AND id <> ?
                 ORDER BY position, id
             ");
             $target->execute([$toColumn, $id]);
@@ -973,7 +1013,7 @@ try {
             foreach ($targetIds as $i => $cardId) $update->execute([positionForIndex($i), $cardId]);
 
             if ($fromColumn !== $toColumn) {
-                $source = $pdo->prepare("SELECT id FROM cards WHERE column_id = ? AND archived = 0 ORDER BY position, id");
+                $source = $pdo->prepare("SELECT id FROM cards WHERE column_id = ? AND archived = 0 AND completed = 0 ORDER BY position, id");
                 $source->execute([$fromColumn]);
                 foreach (array_map('intval', $source->fetchAll(PDO::FETCH_COLUMN)) as $i => $cardId) {
                     $update->execute([positionForIndex($i), $cardId]);
