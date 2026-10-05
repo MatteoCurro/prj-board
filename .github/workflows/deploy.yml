@@ -166,6 +166,32 @@ jobs:
           curl -fsSL --retry 4 --retry-delay 2 -H 'Cache-Control: no-cache'             "https://prj.curromatteo.it/?deploy=${GITHUB_SHA}" -o /tmp/prj-live.html
           grep -Fq '<title>PRJ · Project Board</title>' /tmp/prj-live.html
 
-          curl -fsSL --retry 4 --retry-delay 2 -H 'Cache-Control: no-cache'             "https://prj.curromatteo.it/api/?action=status&deploy=${GITHUB_SHA}" -o /tmp/prj-status.json
+          curl -fsSL --retry 4 --retry-delay 2 -H 'Cache-Control: no-cache'             "https://prj.curromatteo.it/api/index.php?action=status&deploy=${GITHUB_SHA}" -o /tmp/prj-status.json
           node -e "const x=require('/tmp/prj-status.json'); if(!x.ok || x.setup_required) process.exit(1)"
-          echo "PRJ Board deployed: https://prj.curromatteo.it/"
+
+          # Authenticated smoke test: use APP_PASSWORD only inside the runner and
+          # never print it. This also verifies that DB writes made from the UI persist.
+          python3 - <<'PY'
+          import json, os
+          with open('/tmp/prj-login.json', 'w', encoding='utf-8') as f:
+              json.dump({'password': os.environ['APP_PASSWORD']}, f)
+          PY
+
+          curl -fsSL --retry 3 --retry-delay 1             -c /tmp/prj-cookies.txt             -H 'Content-Type: application/json'             --data-binary @/tmp/prj-login.json             "https://prj.curromatteo.it/api/index.php?action=login"             -o /tmp/prj-login-response.json
+          node -e "const x=require('/tmp/prj-login-response.json'); if(!x.ok) process.exit(1)"
+
+          curl -fsSL --retry 3 --retry-delay 1             -b /tmp/prj-cookies.txt             -H 'Cache-Control: no-cache'             "https://prj.curromatteo.it/api/index.php?action=board&smoke=${GITHUB_SHA}"             -o /tmp/prj-board.json
+
+          node - <<'NODE'
+          const x = require('/tmp/prj-board.json');
+          if (!x.ok || !x.board || !Array.isArray(x.board.columns)) process.exit(1);
+          if (x.board.columns.length < 5) {
+            console.error('Expected at least 5 columns after the first user-created column, found:', x.board.columns.length);
+            process.exit(1);
+          }
+          const cardCount = x.board.columns.reduce((n, c) => n + (Array.isArray(c.cards) ? c.cards.length : 0), 0);
+          console.log(`Authenticated board smoke test OK: ${x.board.columns.length} columns, ${cardCount} cards.`);
+          NODE
+
+          rm -f /tmp/prj-login.json /tmp/prj-login-response.json /tmp/prj-cookies.txt /tmp/prj-board.json
+          echo "PRJ Board deployed and authenticated smoke-tested: https://prj.curromatteo.it/"
