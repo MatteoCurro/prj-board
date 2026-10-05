@@ -60,7 +60,12 @@ function siteSettings(PDO $pdo): array {
 function currentUser(PDO $pdo): ?array {
     $id = (int)($_SESSION['user_id'] ?? 0);
     if (!$id) return null;
-    $stmt = $pdo->prepare("SELECT id, username, status, is_admin FROM users WHERE id = ? LIMIT 1");
+    $stmt = $pdo->prepare("
+        SELECT id, username, display_name, notification_email, digest_frequency, digest_due_days, status, is_admin
+        FROM users
+        WHERE id = ?
+        LIMIT 1
+    ");
     $stmt->execute([$id]);
     $user = $stmt->fetch();
     if (!$user || $user['status'] !== 'active') {
@@ -69,6 +74,7 @@ function currentUser(PDO $pdo): ?array {
     }
     $user['id'] = (int)$user['id'];
     $user['is_admin'] = (bool)$user['is_admin'];
+    $user['digest_due_days'] = (int)($user['digest_due_days'] ?? 3);
     return $user;
 }
 function workspaceRole(PDO $pdo, array $user, int $workspaceId): ?string {
@@ -212,7 +218,7 @@ function workspacePayload(PDO $pdo, int $workspaceId, string $role): array {
     unset($tag);
 
     $peopleStmt = $pdo->prepare("
-        SELECT DISTINCT u.id, u.username
+        SELECT DISTINCT u.id, u.username, u.display_name
         FROM users u
         LEFT JOIN workspace_members wm
           ON wm.user_id = u.id AND wm.workspace_id = ?
@@ -290,7 +296,7 @@ function workspacePayload(PDO $pdo, int $workspaceId, string $role): array {
             }
 
             $assigneeStmt = $pdo->prepare("
-                SELECT ca.card_id, u.id, u.username
+                SELECT ca.card_id, u.id, u.username, u.display_name
                 FROM card_assignees ca
                 JOIN users u ON u.id = ca.user_id
                 WHERE ca.card_id IN ($cardMarks)
@@ -302,6 +308,7 @@ function workspacePayload(PDO $pdo, int $workspaceId, string $role): array {
                 $assigneesByCard[(int)$a['card_id']][] = [
                     'id' => (int)$a['id'],
                     'username' => $a['username'],
+                    'display_name' => $a['display_name'],
                 ];
             }
         }
@@ -360,7 +367,7 @@ $action = (string)($_GET['action'] ?? 'status');
 
 if ($setupRequired) {
     if ($action === 'status') {
-        reply(['ok' => true, 'setup_required' => true, 'authenticated' => false, 'version' => '0.5.0']);
+        reply(['ok' => true, 'setup_required' => true, 'authenticated' => false, 'version' => '1.1.0']);
     }
     fail('Configurazione server incompleta.', 503);
 }
@@ -451,6 +458,19 @@ try {
             KEY idx_users_status (status)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    if (!columnExists($pdo, 'users', 'display_name')) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN display_name VARCHAR(80) NULL AFTER username");
+    }
+    if (!columnExists($pdo, 'users', 'notification_email')) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN notification_email VARCHAR(190) NULL AFTER display_name");
+    }
+    if (!columnExists($pdo, 'users', 'digest_frequency')) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN digest_frequency VARCHAR(16) NOT NULL DEFAULT 'off' AFTER notification_email");
+    }
+    if (!columnExists($pdo, 'users', 'digest_due_days')) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN digest_due_days TINYINT UNSIGNED NOT NULL DEFAULT 3 AFTER digest_frequency");
+    }
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS workspace_members (
@@ -552,12 +572,12 @@ try {
 if ($action === 'health') {
     reply([
         'ok' => true,
-        'schema' => '0.5',
+        'schema' => '1.1',
         'has_workspace' => (bool)$pdo->query("SELECT 1 FROM boards LIMIT 1")->fetchColumn(),
         'has_column' => (bool)$pdo->query("SELECT 1 FROM board_columns LIMIT 1")->fetchColumn(),
         'mail_available' => function_exists('mail'),
         'uploads_writable' => is_dir($uploadsRoot) && is_writable($uploadsRoot),
-        'version' => '0.5.0',
+        'version' => '1.1.0',
     ]);
 }
 
@@ -577,7 +597,7 @@ if ($action === 'status') {
             'has_admin' => $adminExists,
             'challenge' => ['question' => "$a + $b"],
             'site' => $site,
-            'version' => '0.5.0',
+            'version' => '1.1.0',
         ]);
     }
 
@@ -588,7 +608,7 @@ if ($action === 'status') {
         'user' => $user,
         'workspaces' => workspaceList($pdo, $user),
         'site' => $site,
-        'version' => '0.5.0',
+        'version' => '1.1.0',
     ]);
 }
 
@@ -1116,6 +1136,33 @@ try {
             reply(['ok' => true]);
         }
 
+        case 'profile:update': {
+            $body = jsonBody();
+            $displayName = cleanText($body['display_name'] ?? '', 80);
+            $email = strtolower(cleanText($body['notification_email'] ?? '', 190));
+            $frequency = (string)($body['digest_frequency'] ?? 'off');
+            $dueDays = (int)($body['digest_due_days'] ?? 3);
+
+            if (!in_array($frequency, ['off', 'daily', 'weekly'], true)) fail('Frequenza recap non valida.');
+            if (!in_array($dueDays, [1, 2, 3, 5, 7, 14], true)) fail('Finestra scadenze non valida.');
+            if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Indirizzo email non valido.');
+            if ($frequency !== 'off' && $email === '') fail('Inserisci un indirizzo email per attivare il recap.');
+
+            $pdo->prepare("
+                UPDATE users
+                SET display_name = ?, notification_email = ?, digest_frequency = ?, digest_due_days = ?
+                WHERE id = ?
+            ")->execute([
+                $displayName ?: null,
+                $email ?: null,
+                $frequency,
+                $dueDays,
+                $user['id'],
+            ]);
+
+            reply(['ok' => true, 'user' => currentUser($pdo)]);
+        }
+
         case 'password:change': {
             $body = jsonBody();
             $current = (string)($body['current_password'] ?? '');
@@ -1149,15 +1196,16 @@ try {
             $search = cleanText($_GET['q'] ?? '', 32);
             $like = '%' . $search . '%';
             $stmt = $pdo->prepare("
-                SELECT u.id, u.username, u.is_admin, wm.role
+                SELECT u.id, u.username, u.display_name, u.is_admin, wm.role
                 FROM users u
                 LEFT JOIN workspace_members wm
                   ON wm.user_id = u.id AND wm.workspace_id = ?
-                WHERE u.status = 'active' AND u.username LIKE ?
-                ORDER BY (wm.role IS NOT NULL) DESC, u.username
+                WHERE u.status = 'active'
+                  AND (u.username LIKE ? OR COALESCE(u.display_name, '') LIKE ?)
+                ORDER BY (wm.role IS NOT NULL) DESC, COALESCE(NULLIF(u.display_name, ''), u.username)
                 LIMIT 100
             ");
-            $stmt->execute([$workspaceId, $like]);
+            $stmt->execute([$workspaceId, $like, $like]);
             $rows = $stmt->fetchAll();
             foreach ($rows as &$row) {
                 $row['id'] = (int)$row['id'];
@@ -1203,7 +1251,7 @@ try {
         case 'admin:users': {
             if (empty($user['is_admin'])) fail('Solo un admin globale può gestire gli utenti.', 403);
             $stmt = $pdo->query("
-                SELECT id, username, status, is_admin, created_at
+                SELECT id, username, display_name, status, is_admin, created_at
                 FROM users
                 ORDER BY FIELD(status, 'pending', 'active', 'rejected'), created_at DESC
                 LIMIT 200
