@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/app.css?v=1.3.0">
+  <link rel="stylesheet" href="assets/app.css?v=1.4.0">
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -35,6 +35,7 @@
           <input id="searchInput" type="search" placeholder="Cerca…" autocomplete="off">
           <kbd>/</kbd>
         </label>
+        <button id="myTasksBtn" class="icon-btn" type="button" title="Le mie attività" aria-label="Le mie attività" hidden><i data-lucide="list-checks"></i><span id="myTasksBadge" class="mini-badge" hidden></span></button>
         <button id="adminBtn" class="icon-btn" type="button" title="Utenti e accessi" aria-label="Utenti e accessi" hidden><i data-lucide="users"></i><span id="pendingBadge" class="mini-badge" hidden></span></button>
         <button id="userChip" class="user-chip" type="button" hidden title="Profilo"></button>
         <button id="logoutBtn" class="icon-btn" type="button" title="Esci" aria-label="Esci" hidden><i data-lucide="log-out"></i></button>
@@ -155,6 +156,21 @@
     <div class="modal-card"><div class="modal-brand"><div class="brand-mark large">P</div><div><h2>Configurazione richiesta</h2><p>Mancano le credenziali server.</p></div></div></div>
   </dialog>
 
+  <dialog id="myTasksDialog" class="modal">
+    <div class="modal-card my-tasks-modal-card">
+      <div class="modal-head">
+        <div><p class="eyebrow">Panoramica</p><h2>Le mie attività</h2></div>
+        <button class="ghost-icon dialog-close" type="button" aria-label="Chiudi"><i data-lucide="x"></i></button>
+      </div>
+      <div class="my-tasks-summary">
+        <span id="myTasksSummary">Caricamento…</span>
+        <button id="refreshMyTasksBtn" class="tiny-btn" type="button"><i data-lucide="refresh-cw"></i> Aggiorna</button>
+      </div>
+      <div id="myTasksList" class="my-tasks-list"></div>
+      <div class="modal-actions"><button class="button ghost dialog-cancel" type="button">Chiudi</button></div>
+    </div>
+  </dialog>
+
   <dialog id="calendarDialog" class="modal">
     <div class="modal-card calendar-modal-card">
       <div class="modal-head">
@@ -272,19 +288,20 @@
       <label class="field"><span>Descrizione</span><textarea id="cardDescription" rows="6" maxlength="10000" placeholder="Note, link, dettagli…"></textarea></label>
       <div class="form-grid">
         <label class="field"><span>Etichetta</span><select id="cardLabel"><option value="">Nessuna</option><option value="magenta">Magenta</option><option value="amber">Ambra</option><option value="teal">Verde acqua</option><option value="blue">Blu</option><option value="violet">Viola</option></select></label>
-        <div class="field due-field">
-          <span>Scadenza</span>
-          <div class="due-date-control">
-            <button id="dueDatePickerBtn" class="due-calendar-btn" type="button" aria-label="Apri calendario" title="Apri calendario"><i data-lucide="calendar-days"></i></button>
-            <input id="cardDueDate" type="date">
-            <button id="clearDueDateBtn" class="due-clear-btn" type="button" aria-label="Rimuovi scadenza" title="Rimuovi scadenza"><i data-lucide="x"></i></button>
-          </div>
-          <div class="due-quick-list" aria-label="Scadenze rapide">
-            <button type="button" data-due-offset="0">Oggi</button>
-            <button type="button" data-due-offset="1">Domani</button>
-            <button type="button" data-due-offset="2">+2 gg</button>
-            <button type="button" data-due-offset="7">+7 gg</button>
-          </div>
+        <label class="field"><span>Priorità</span><select id="cardPriority"><option value="low">Bassa</option><option value="normal" selected>Normale</option><option value="high">Alta</option><option value="urgent">Urgente</option></select></label>
+      </div>
+      <div class="field due-field">
+        <span>Scadenza</span>
+        <div class="due-date-control">
+          <button id="dueDatePickerBtn" class="due-calendar-btn" type="button" aria-label="Apri calendario" title="Apri calendario"><i data-lucide="calendar-days"></i></button>
+          <input id="cardDueDate" type="date">
+          <button id="clearDueDateBtn" class="due-clear-btn" type="button" aria-label="Rimuovi scadenza" title="Rimuovi scadenza"><i data-lucide="x"></i></button>
+        </div>
+        <div class="due-quick-list" aria-label="Scadenze rapide">
+          <button type="button" data-due-offset="0">Oggi</button>
+          <button type="button" data-due-offset="1">Domani</button>
+          <button type="button" data-due-offset="2">+2 gg</button>
+          <button type="button" data-due-offset="7">+7 gg</button>
         </div>
       </div>
 
@@ -292,6 +309,15 @@
         <div class="field-inline-head"><span>Assegnatari</span><small>Puoi selezionarne più di uno</small></div>
         <div id="cardAssigneeChoices" class="assignee-choice-list"></div>
       </div>
+
+      <section class="checklist-section">
+        <div class="field-inline-head"><span>Checklist</span><small id="checklistProgressLabel">0/0 completati</small></div>
+        <div id="checklistList" class="checklist-list"></div>
+        <div id="checklistComposer" class="checklist-composer">
+          <input id="checklistNewItem" type="text" maxlength="240" placeholder="Aggiungi un sotto-task…">
+          <button id="addChecklistItemBtn" class="button secondary" type="button"><i data-lucide="plus"></i> Aggiungi</button>
+        </div>
+      </section>
 
       <section class="attachment-section">
         <div class="field-inline-head"><span>Allegati</span><small>Max 25 MB per file</small></div>
@@ -420,12 +446,13 @@
     <article class="task-card" tabindex="0" data-card-id="">
       <div class="task-accent"></div>
       <div class="task-card-body">
-        <div class="task-topline"><span class="task-label" hidden></span><div class="task-quick-actions"><span class="card-drag-handle" title="Trascina"><i data-lucide="grip-vertical"></i></span><button class="card-complete ghost-icon" type="button" aria-label="Segna come fatto" title="Segna come fatto"><i data-lucide="circle-check-big"></i></button><button class="card-edit ghost-icon" type="button" aria-label="Modifica card"><i data-lucide="pencil"></i></button></div></div>
+        <div class="task-topline"><div class="task-flags"><span class="task-label" hidden></span><span class="task-priority" hidden></span></div><div class="task-quick-actions"><span class="card-drag-handle" title="Trascina"><i data-lucide="grip-vertical"></i></span><button class="card-complete ghost-icon" type="button" aria-label="Segna come fatto" title="Segna come fatto"><i data-lucide="circle-check-big"></i></button><button class="card-edit ghost-icon" type="button" aria-label="Modifica card"><i data-lucide="pencil"></i></button></div></div>
         <h3 class="task-title"></h3>
         <p class="task-description" hidden></p>
         <div class="task-assignees" hidden></div>
         <footer class="task-meta">
           <span class="task-due" hidden><i class="task-due-icon" data-lucide="calendar-days"></i><span></span></span>
+          <span class="checklist-count" hidden><i data-lucide="list-checks"></i><span></span></span>
           <span class="attachment-count" hidden><i data-lucide="paperclip"></i><span></span></span>
         </footer>
       </div>
@@ -434,6 +461,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-  <script src="js/app.js?v=1.3.0" defer></script>
+  <script src="js/app.js?v=1.4.0" defer></script>
 </body>
 </html>
