@@ -56,7 +56,6 @@ jobs:
           fi
 
       - name: Validate source
-        if: steps.config.outputs.ready == 'true'
         run: |
           set -euo pipefail
           php -l api/index.php
