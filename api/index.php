@@ -11,6 +11,7 @@ $uploadsRoot = $privateRoot . '/uploads';
 
 require_once dirname(__DIR__) . '/lib/mailer.php';
 require_once dirname(__DIR__) . '/lib/digest.php';
+require_once dirname(__DIR__) . '/lib/calendar.php';
 
 function reply(array $payload, int $status = 200): never {
     http_response_code($status);
@@ -370,7 +371,7 @@ $action = (string)($_GET['action'] ?? 'status');
 
 if ($setupRequired) {
     if ($action === 'status') {
-        reply(['ok' => true, 'setup_required' => true, 'authenticated' => false, 'version' => '1.2.0']);
+        reply(['ok' => true, 'setup_required' => true, 'authenticated' => false, 'version' => '1.3.0']);
     }
     fail('Configurazione server incompleta.', 503);
 }
@@ -578,6 +579,27 @@ try {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS calendar_tokens (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            token CHAR(64) NOT NULL,
+            scope VARCHAR(16) NOT NULL,
+            workspace_id INT UNSIGNED NOT NULL,
+            user_id INT UNSIGNED NULL,
+            created_by INT UNSIGNED NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_calendar_token (token),
+            UNIQUE KEY uq_calendar_scope_owner (scope, workspace_id, user_id),
+            KEY idx_calendar_workspace (workspace_id),
+            KEY idx_calendar_user (user_id),
+            CONSTRAINT fk_calendar_workspace FOREIGN KEY (workspace_id) REFERENCES boards(id) ON DELETE CASCADE,
+            CONSTRAINT fk_calendar_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            CONSTRAINT fk_calendar_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
     if (!(int)$pdo->query("SELECT COUNT(*) FROM boards")->fetchColumn()) {
         $pdo->prepare("INSERT INTO boards (name, position) VALUES (?, 1000)")->execute(['Progetti']);
     }
@@ -594,7 +616,7 @@ if ($action === 'health') {
     $smtp = $transport['smtp'] ?? [];
     reply([
         'ok' => true,
-        'schema' => '1.2',
+        'schema' => '1.3',
         'has_workspace' => (bool)$pdo->query("SELECT 1 FROM boards LIMIT 1")->fetchColumn(),
         'has_column' => (bool)$pdo->query("SELECT 1 FROM board_columns LIMIT 1")->fetchColumn(),
         'mail_available' => function_exists('mail'),
@@ -603,7 +625,7 @@ if ($action === 'health') {
         'email_transport_available' => (bool)($transport['ok'] ?? false),
         'email_transport' => $transport['transport'] ?? 'none',
         'uploads_writable' => is_dir($uploadsRoot) && is_writable($uploadsRoot),
-        'version' => '1.2.0',
+        'version' => '1.3.0',
     ]);
 }
 
@@ -623,7 +645,7 @@ if ($action === 'status') {
             'has_admin' => $adminExists,
             'challenge' => ['question' => "$a + $b"],
             'site' => $site,
-            'version' => '1.2.0',
+            'version' => '1.3.0',
         ]);
     }
 
@@ -634,7 +656,7 @@ if ($action === 'status') {
         'user' => $user,
         'workspaces' => workspaceList($pdo, $user),
         'site' => $site,
-        'version' => '1.2.0',
+        'version' => '1.3.0',
     ]);
 }
 
@@ -1218,6 +1240,97 @@ try {
                 prj_digest_record($pdo, (int)$user['id'], 'test', $recipient, 'failed', 0, $e->getMessage());
                 fail('Invio email non riuscito: ' . $e->getMessage(), 502);
             }
+        }
+
+        case 'calendar:feeds': {
+            $workspaceId = intId($_GET['workspace_id'] ?? null);
+            $role = requireWorkspaceRole($pdo, $user, $workspaceId, ['viewer', 'editor', 'admin']);
+
+            $personalStmt = $pdo->prepare("
+                SELECT token
+                FROM calendar_tokens
+                WHERE scope = 'personal' AND workspace_id = ? AND user_id = ?
+                LIMIT 1
+            ");
+            $personalStmt->execute([$workspaceId, $user['id']]);
+            $personalToken = $personalStmt->fetchColumn() ?: null;
+
+            $workspaceToken = null;
+            if ($role === 'admin') {
+                $workspaceStmt = $pdo->prepare("
+                    SELECT token
+                    FROM calendar_tokens
+                    WHERE scope = 'workspace' AND workspace_id = ? AND user_id IS NULL
+                    LIMIT 1
+                ");
+                $workspaceStmt->execute([$workspaceId]);
+                $workspaceToken = $workspaceStmt->fetchColumn() ?: null;
+            }
+
+            reply([
+                'ok' => true,
+                'personal' => $personalToken ? ['url' => prj_calendar_url($config, (string)$personalToken)] : null,
+                'workspace' => $workspaceToken ? ['url' => prj_calendar_url($config, (string)$workspaceToken)] : null,
+                'can_manage_workspace_feed' => $role === 'admin',
+            ]);
+        }
+
+        case 'calendar:token': {
+            $body = jsonBody();
+            $workspaceId = intId($body['workspace_id'] ?? null);
+            $scope = (string)($body['scope'] ?? 'personal');
+            if (!in_array($scope, ['personal', 'workspace'], true)) fail('Tipo calendario non valido.');
+
+            if ($scope === 'workspace') {
+                requireWorkspaceRole($pdo, $user, $workspaceId, ['admin']);
+                $ownerId = null;
+            } else {
+                requireWorkspaceRole($pdo, $user, $workspaceId, ['viewer', 'editor', 'admin']);
+                $ownerId = (int)$user['id'];
+            }
+
+            $token = prj_calendar_token();
+            if ($scope === 'workspace') {
+                $pdo->prepare("
+                    DELETE FROM calendar_tokens
+                    WHERE scope = 'workspace' AND workspace_id = ? AND user_id IS NULL
+                ")->execute([$workspaceId]);
+            } else {
+                $pdo->prepare("
+                    DELETE FROM calendar_tokens
+                    WHERE scope = 'personal' AND workspace_id = ? AND user_id = ?
+                ")->execute([$workspaceId, $ownerId]);
+            }
+
+            $pdo->prepare("
+                INSERT INTO calendar_tokens (token, scope, workspace_id, user_id, created_by)
+                VALUES (?, ?, ?, ?, ?)
+            ")->execute([$token, $scope, $workspaceId, $ownerId, $user['id']]);
+
+            reply(['ok' => true, 'url' => prj_calendar_url($config, $token)]);
+        }
+
+        case 'calendar:revoke': {
+            $body = jsonBody();
+            $workspaceId = intId($body['workspace_id'] ?? null);
+            $scope = (string)($body['scope'] ?? 'personal');
+            if (!in_array($scope, ['personal', 'workspace'], true)) fail('Tipo calendario non valido.');
+
+            if ($scope === 'workspace') {
+                requireWorkspaceRole($pdo, $user, $workspaceId, ['admin']);
+                $pdo->prepare("
+                    DELETE FROM calendar_tokens
+                    WHERE scope = 'workspace' AND workspace_id = ? AND user_id IS NULL
+                ")->execute([$workspaceId]);
+            } else {
+                requireWorkspaceRole($pdo, $user, $workspaceId, ['viewer', 'editor', 'admin']);
+                $pdo->prepare("
+                    DELETE FROM calendar_tokens
+                    WHERE scope = 'personal' AND workspace_id = ? AND user_id = ?
+                ")->execute([$workspaceId, $user['id']]);
+            }
+
+            reply(['ok' => true]);
         }
 
         case 'password:change': {
