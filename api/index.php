@@ -9,6 +9,9 @@ $configPath = dirname(__DIR__, 2) . '/private/config.php';
 $privateRoot = dirname(__DIR__, 2) . '/private';
 $uploadsRoot = $privateRoot . '/uploads';
 
+require_once dirname(__DIR__) . '/lib/mailer.php';
+require_once dirname(__DIR__) . '/lib/digest.php';
+
 function reply(array $payload, int $status = 200): never {
     http_response_code($status);
     echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -367,7 +370,7 @@ $action = (string)($_GET['action'] ?? 'status');
 
 if ($setupRequired) {
     if ($action === 'status') {
-        reply(['ok' => true, 'setup_required' => true, 'authenticated' => false, 'version' => '1.1.0']);
+        reply(['ok' => true, 'setup_required' => true, 'authenticated' => false, 'version' => '1.2.0']);
     }
     fail('Configurazione server incompleta.', 503);
 }
@@ -558,6 +561,23 @@ try {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS digest_logs (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            user_id INT UNSIGNED NOT NULL,
+            kind VARCHAR(16) NOT NULL DEFAULT 'digest',
+            recipient VARCHAR(190) NOT NULL,
+            status VARCHAR(16) NOT NULL,
+            task_count INT UNSIGNED NOT NULL DEFAULT 0,
+            error_message VARCHAR(1000) NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_digest_logs_user_kind_created (user_id, kind, created_at),
+            KEY idx_digest_logs_status_created (status, created_at),
+            CONSTRAINT fk_digest_logs_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
     if (!(int)$pdo->query("SELECT COUNT(*) FROM boards")->fetchColumn()) {
         $pdo->prepare("INSERT INTO boards (name, position) VALUES (?, 1000)")->execute(['Progetti']);
     }
@@ -570,14 +590,17 @@ try {
 }
 
 if ($action === 'health') {
+    $smtp = prj_smtp_probe($config);
     reply([
         'ok' => true,
-        'schema' => '1.1',
+        'schema' => '1.2',
         'has_workspace' => (bool)$pdo->query("SELECT 1 FROM boards LIMIT 1")->fetchColumn(),
         'has_column' => (bool)$pdo->query("SELECT 1 FROM board_columns LIMIT 1")->fetchColumn(),
         'mail_available' => function_exists('mail'),
+        'smtp_available' => (bool)($smtp['ok'] ?? false),
+        'smtp_ms' => $smtp['ms'] ?? null,
         'uploads_writable' => is_dir($uploadsRoot) && is_writable($uploadsRoot),
-        'version' => '1.1.0',
+        'version' => '1.2.0',
     ]);
 }
 
@@ -597,7 +620,7 @@ if ($action === 'status') {
             'has_admin' => $adminExists,
             'challenge' => ['question' => "$a + $b"],
             'site' => $site,
-            'version' => '1.1.0',
+            'version' => '1.2.0',
         ]);
     }
 
@@ -608,7 +631,7 @@ if ($action === 'status') {
         'user' => $user,
         'workspaces' => workspaceList($pdo, $user),
         'site' => $site,
-        'version' => '1.1.0',
+        'version' => '1.2.0',
     ]);
 }
 
@@ -1161,6 +1184,37 @@ try {
             ]);
 
             reply(['ok' => true, 'user' => currentUser($pdo)]);
+        }
+
+        case 'email:test': {
+            $recipient = trim((string)($user['notification_email'] ?? ''));
+            if ($recipient === '' || !filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+                fail('Configura prima un indirizzo email notifiche valido nel profilo.');
+            }
+
+            $site = siteSettings($pdo);
+            $display = trim((string)($user['display_name'] ?? '')) ?: '@' . $user['username'];
+            $safeDisplay = htmlspecialchars($display, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $body = '<div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#d62b64;font-weight:700">PRJ</div>'
+                . '<h1 style="font-size:22px;margin:8px 0 8px;color:#f1f3ee">Email di test</h1>'
+                . '<p style="font-size:13px;line-height:1.55;color:#a9afa4;margin:0">Ciao ' . $safeDisplay . ', l\'invio SMTP di PRJ funziona correttamente. Se leggi questo messaggio, il tuo indirizzo per i recap è configurato.</p>'
+                . '<p style="font-size:12px;line-height:1.5;color:#747a70;margin:18px 0 0">I recap automatici vengono inviati solo se hai scelto una frequenza diversa da “Disattivato”.</p>';
+            $subject = '[' . ($site['name'] ?? 'PRJ') . '] Email di test';
+
+            try {
+                $mail = prj_send_mail(
+                    $config,
+                    $recipient,
+                    $subject,
+                    prj_mail_html_document($subject, $body),
+                    "Ciao $display,\n\nL'invio SMTP di PRJ funziona correttamente.\n"
+                );
+                prj_digest_record($pdo, (int)$user['id'], 'test', $recipient, 'sent', 0);
+                reply(['ok' => true, 'recipient' => $recipient, 'smtp_response' => $mail['response'] ?? null]);
+            } catch (Throwable $e) {
+                prj_digest_record($pdo, (int)$user['id'], 'test', $recipient, 'failed', 0, $e->getMessage());
+                fail('Invio email non riuscito: ' . $e->getMessage(), 502);
+            }
         }
 
         case 'password:change': {
