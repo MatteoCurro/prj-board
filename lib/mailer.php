@@ -40,6 +40,18 @@ function prj_smtp_open(array $config) {
     prj_smtp_command($socket, '', [220]);
     $helo = preg_replace('/[^a-zA-Z0-9.-]/', '', (string)($config['smtp_helo'] ?? 'prj.curromatteo.it')) ?: 'localhost';
     prj_smtp_command($socket, 'EHLO ' . $helo, [250]);
+
+    $user = trim((string)($config['smtp_user'] ?? ''));
+    $pass = (string)($config['smtp_pass'] ?? '');
+    if ($user !== '' || $pass !== '') {
+        if ($user === '' || $pass === '') {
+            throw new RuntimeException('Configurazione SMTP incompleta: username e password devono essere entrambi valorizzati.');
+        }
+        prj_smtp_command($socket, 'AUTH LOGIN', [334]);
+        prj_smtp_command($socket, base64_encode($user), [334]);
+        prj_smtp_command($socket, base64_encode($pass), [235]);
+    }
+
     return $socket;
 }
 
@@ -95,15 +107,39 @@ function prj_php_mail_send(array $config, string $to, string $subject, string $h
         'X-Mailer: PRJ Board',
     ];
 
-    $ok = @mail($to, prj_mail_header($subject), $html, implode("\r\n", $headers));
+    $extra = '-f' . escapeshellarg($from);
+    $ok = @mail($to, prj_mail_header($subject), $html, implode("\r\n", $headers), $extra);
     if (!$ok) throw new RuntimeException('Il trasporto PHP mail() ha rifiutato il messaggio.');
-    return ['ok' => true, 'recipient' => $to, 'transport' => 'php-mail', 'response' => 'mail() accepted'];
+    return [
+        'ok' => true,
+        'accepted' => true,
+        'delivery_confirmed' => false,
+        'recipient' => $to,
+        'transport' => 'php-mail',
+        'response' => 'mail() accepted by local transport',
+    ];
 }
 
 function prj_email_transport_probe(array $config): array {
+    $preferred = strtolower(trim((string)($config['mail_transport'] ?? 'auto')));
+    if (!in_array($preferred, ['auto', 'smtp', 'php-mail'], true)) {
+        return ['ok' => false, 'transport' => 'none', 'smtp' => ['ok' => false, 'error' => 'Trasporto email non valido.']];
+    }
+
+    if ($preferred === 'php-mail') {
+        return [
+            'ok' => function_exists('mail'),
+            'transport' => function_exists('mail') ? 'php-mail' : 'none',
+            'smtp' => ['ok' => false, 'skipped' => true, 'error' => 'SMTP non selezionato: uso esplicito di PHP mail().'],
+        ];
+    }
+
     $smtp = prj_smtp_probe($config);
     if (!empty($smtp['ok'])) {
         return ['ok' => true, 'transport' => 'smtp', 'smtp' => $smtp];
+    }
+    if ($preferred === 'smtp') {
+        return ['ok' => false, 'transport' => 'smtp', 'smtp' => $smtp];
     }
     if (function_exists('mail')) {
         return ['ok' => true, 'transport' => 'php-mail', 'smtp' => $smtp];
@@ -120,6 +156,14 @@ function prj_send_mail(array $config, string $to, string $subject, string $html,
 
     if ($text === '') {
         $text = trim(html_entity_decode(strip_tags(str_replace(['<br>', '<br/>', '<br />', '</p>', '</li>'], ["\n", "\n", "\n", "\n", "\n"], $html)), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    }
+
+    $preferred = strtolower(trim((string)($config['mail_transport'] ?? 'auto')));
+    if (!in_array($preferred, ['auto', 'smtp', 'php-mail'], true)) {
+        throw new RuntimeException('Trasporto email non valido: ' . $preferred);
+    }
+    if ($preferred === 'php-mail') {
+        return prj_php_mail_send($config, $to, $subject, $html);
     }
 
     $socket = null;
@@ -160,13 +204,20 @@ function prj_send_mail(array $config, string $to, string $subject, string $html,
         try { prj_smtp_command($socket, 'QUIT', [221, 250]); } catch (Throwable) {}
         fclose($socket);
 
-        return ['ok' => true, 'recipient' => $to, 'transport' => 'smtp', 'response' => $accepted['text']];
+        return [
+            'ok' => true,
+            'accepted' => true,
+            'delivery_confirmed' => false,
+            'recipient' => $to,
+            'transport' => 'smtp',
+            'response' => $accepted['text'],
+        ];
     } catch (Throwable $e) {
         $smtpError = $e->getMessage();
         if (is_resource($socket)) fclose($socket);
     }
 
-    if (($config['mail_fallback_php'] ?? true) && function_exists('mail')) {
+    if ($preferred === 'auto' && ($config['mail_fallback_php'] ?? true) && function_exists('mail')) {
         $result = prj_php_mail_send($config, $to, $subject, $html);
         $result['smtp_error'] = $smtpError;
         return $result;
