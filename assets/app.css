@@ -89,3 +89,8 @@ button,input,textarea,select{font:inherit}button{color:inherit}button:focus-visi
   .card-modal .modal-actions.split>div{width:100%;justify-content:flex-end}
   .profile-modal-card{max-height:calc(100dvh - 20px);overflow:auto}
 }
+
+
+/* v1.2 — email digest controls */
+.email-test-row{margin-top:14px;padding:11px 12px;border:1px solid var(--border-soft);border-radius:12px;background:#151713;display:flex;align-items:center;justify-content:space-between;gap:12px}.email-test-row>div{display:flex;flex-direction:column;gap:3px}.email-test-row strong{font-size:11px;color:var(--text)}.email-test-row small{font-size:10px;color:var(--muted)}.email-test-row .button{flex:0 0 auto;height:34px}.email-test-row .button svg{width:14px}.email-test-row .button.loading{opacity:.65;cursor:progress}
+@media(max-width:620px){.email-test-row{align-items:stretch;flex-direction:column}.email-test-row .button{width:100%}}
