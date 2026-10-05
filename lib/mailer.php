@@ -80,16 +80,29 @@ function prj_mail_header(string $value): string {
     return mb_encode_mimeheader($value, 'UTF-8', 'B', "\r\n");
 }
 
-function prj_mail_html_document(string $title, string $body): string {
+function prj_mail_html_document(string $title, string $body, string $preheader = ''): string {
     $safeTitle = htmlspecialchars($title, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-    return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
+    $safePreheader = htmlspecialchars($preheader, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        . '<meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark">'
         . '<title>' . $safeTitle . '</title></head>'
-        . '<body style="margin:0;background:#11120f;color:#ecefe8;font-family:Arial,sans-serif">'
-        . '<div style="max-width:680px;margin:0 auto;padding:28px 18px">'
-        . '<div style="background:#1a1d18;border:1px solid #353a31;border-radius:16px;padding:24px">'
+        . '<body style="margin:0;padding:0;background:#10110f;color:#f5f6f0;font-family:Arial,Helvetica,sans-serif">'
+        . ($safePreheader !== '' ? '<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">' . $safePreheader . '</div>' : '')
+        . '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#10110f">'
+        . '<tr><td align="center" style="padding:32px 16px">'
+        . '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:680px">'
+        . '<tr><td style="padding:0 0 14px">'
+        . '<table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>'
+        . '<td style="width:38px;height:38px;background:#b6174b;border-radius:11px;text-align:center;vertical-align:middle;color:#ffffff;font-size:19px;font-weight:800">P</td>'
+        . '<td style="padding-left:11px"><div style="font-size:17px;line-height:1.1;font-weight:800;color:#f5f6f0">PRJ</div>'
+        . '<div style="margin-top:3px;font-size:11px;line-height:1.2;color:#7f8779">Project workspace</div></td>'
+        . '</tr></table></td></tr>'
+        . '<tr><td style="background:#191b17;border:1px solid #32362e;border-radius:16px;padding:26px 24px">'
         . $body
-        . '</div><p style="color:#777d73;font-size:11px;text-align:center;margin:18px 0 0">PRJ · Project Board</p>'
-        . '</div></body></html>';
+        . '</td></tr>'
+        . '<tr><td style="padding:16px 4px 0;text-align:center;font-size:11px;line-height:1.5;color:#6f776b">'
+        . 'PRJ · notifiche automatiche del tuo workspace'
+        . '</td></tr></table></td></tr></table></body></html>';
 }
 
 function prj_smtp_local_diagnostic_send(array $config, string $to, string $subject, string $html, string $text = ''): array {
@@ -301,31 +314,60 @@ function prj_sendmail_verbose_diagnostic(array $config, string $to, string $subj
     ];
 }
 
-function prj_php_mail_send(array $config, string $to, string $subject, string $html): array {
+function prj_php_mail_send(array $config, string $to, string $subject, string $html, string $text = ''): array {
     if (!function_exists('mail')) {
         throw new RuntimeException('PHP mail() non disponibile.');
     }
 
+    $to = trim($to);
     $from = trim((string)($config['mail_from'] ?? 'prj@curromatteo.it'));
     $fromName = trim((string)($config['mail_from_name'] ?? 'PRJ'));
+    if (!filter_var($to, FILTER_VALIDATE_EMAIL)) throw new InvalidArgumentException('Destinatario email non valido.');
+    if (!filter_var($from, FILTER_VALIDATE_EMAIL)) throw new InvalidArgumentException('Mittente email non valido.');
+
+    if ($text === '') {
+        $text = trim(html_entity_decode(strip_tags(str_replace(
+            ['<br>', '<br/>', '<br />', '</p>', '</li>'],
+            ["\n", "\n", "\n", "\n", "\n"],
+            $html
+        )), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    }
+
+    $domain = preg_replace('/^.*@/', '', $from);
+    $boundary = 'prj_' . bin2hex(random_bytes(12));
+    $messageId = bin2hex(random_bytes(12)) . '@' . $domain;
     $headers = [
+        'Date: ' . date(DATE_RFC2822),
         'From: ' . prj_mail_header($fromName) . ' <' . $from . '>',
+        'Message-ID: <' . $messageId . '>',
         'MIME-Version: 1.0',
-        'Content-Type: text/html; charset=UTF-8',
-        'Content-Transfer-Encoding: 8bit',
+        'Content-Type: multipart/alternative; boundary="' . $boundary . '"',
+        'Auto-Submitted: auto-generated',
+        'X-Auto-Response-Suppress: All',
         'X-Mailer: PRJ Board',
     ];
 
+    $plain = str_replace("\n", "\r\n", str_replace("\r", '', $text));
+    $message = '--' . $boundary . "\r\n"
+        . "Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n"
+        . $plain . "\r\n\r\n"
+        . '--' . $boundary . "\r\n"
+        . "Content-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n"
+        . $html . "\r\n\r\n"
+        . '--' . $boundary . "--\r\n";
+
     $extra = '-f' . escapeshellarg($from);
-    $ok = @mail($to, prj_mail_header($subject), $html, implode("\r\n", $headers), $extra);
+    $ok = @mail($to, prj_mail_header($subject), $message, implode("\r\n", $headers), $extra);
     if (!$ok) throw new RuntimeException('Il trasporto PHP mail() ha rifiutato il messaggio.');
+
     return [
         'ok' => true,
         'accepted' => true,
         'delivery_confirmed' => false,
         'recipient' => $to,
         'transport' => 'php-mail',
-        'response' => 'mail() accepted by local transport',
+        'message_id' => $messageId,
+        'response' => 'mail() accepted by configured sendmail transport',
     ];
 }
 
@@ -372,7 +414,7 @@ function prj_send_mail(array $config, string $to, string $subject, string $html,
         throw new RuntimeException('Trasporto email non valido: ' . $preferred);
     }
     if ($preferred === 'php-mail') {
-        return prj_php_mail_send($config, $to, $subject, $html);
+        return prj_php_mail_send($config, $to, $subject, $html, $text);
     }
 
     $socket = null;
@@ -427,7 +469,7 @@ function prj_send_mail(array $config, string $to, string $subject, string $html,
     }
 
     if ($preferred === 'auto' && ($config['mail_fallback_php'] ?? true) && function_exists('mail')) {
-        $result = prj_php_mail_send($config, $to, $subject, $html);
+        $result = prj_php_mail_send($config, $to, $subject, $html, $text);
         $result['smtp_error'] = $smtpError;
         return $result;
     }
