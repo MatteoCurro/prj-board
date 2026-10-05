@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#11120f">
+  <title>PRJ · Project Board</title>
+  <meta name="description" content="Una project board essenziale, veloce e privata.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/app.css?v=0.1.0">
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <header class="topbar">
+      <div class="brand-wrap">
+        <div class="brand-mark" aria-hidden="true">P</div>
+        <div>
+          <a class="brand" href="/" aria-label="PRJ home">PRJ</a>
+          <span class="brand-sub">project board</span>
+        </div>
+      </div>
+      <div class="top-actions">
+        <label class="search-wrap" aria-label="Cerca nelle card">
+          <i data-lucide="search" aria-hidden="true"></i>
+          <input id="searchInput" type="search" placeholder="Cerca…" autocomplete="off">
+          <kbd>/</kbd>
+        </label>
+        <button id="logoutBtn" class="icon-btn" type="button" title="Esci" aria-label="Esci" hidden><i data-lucide="log-out"></i></button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="board-head">
+        <div>
+          <p class="eyebrow">Workspace</p>
+          <div class="board-title-row">
+            <h1 id="boardTitle">Progetti</h1>
+            <button id="renameBoardBtn" class="ghost-icon" type="button" aria-label="Rinomina board"><i data-lucide="pencil"></i></button>
+          </div>
+          <p id="boardMeta" class="muted">Caricamento board…</p>
+        </div>
+        <div class="board-actions">
+          <button id="addColumnBtn" class="button secondary" type="button"><i data-lucide="columns-3"></i> Nuova colonna</button>
+          <button id="refreshBtn" class="icon-btn" type="button" aria-label="Aggiorna board" title="Aggiorna"><i data-lucide="refresh-cw"></i></button>
+        </div>
+      </section>
+
+      <section id="board" class="board" aria-label="Project board"></section>
+
+      <div id="emptyState" class="empty-state" hidden>
+        <div class="empty-icon"><i data-lucide="layout-dashboard"></i></div>
+        <h2>La board è vuota</h2>
+        <p>Crea la prima colonna e inizia a organizzare il lavoro.</p>
+        <button id="emptyAddColumnBtn" class="button primary" type="button">Crea una colonna</button>
+      </div>
+    </main>
+  </div>
+
+  <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+  <dialog id="loginDialog" class="modal login-modal">
+    <form id="loginForm" method="dialog" class="modal-card">
+      <div class="modal-brand">
+        <div class="brand-mark large" aria-hidden="true">P</div>
+        <div>
+          <h2>PRJ</h2>
+          <p>Accedi alla project board.</p>
+        </div>
+      </div>
+      <label class="field">
+        <span>Password</span>
+        <input id="loginPassword" type="password" autocomplete="current-password" required autofocus>
+      </label>
+      <p id="loginError" class="form-error" hidden></p>
+      <button class="button primary wide" type="submit">Accedi <i data-lucide="arrow-right"></i></button>
+    </form>
+  </dialog>
+
+  <dialog id="setupDialog" class="modal login-modal">
+    <div class="modal-card">
+      <div class="modal-brand">
+        <div class="brand-mark large" aria-hidden="true">P</div>
+        <div>
+          <h2>Configurazione richiesta</h2>
+          <p>Mancano le credenziali server. Configura i GitHub Secrets indicati nel README e riesegui il deploy.</p>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="columnDialog" class="modal">
+    <form id="columnForm" method="dialog" class="modal-card compact">
+      <div class="modal-head">
+        <div><p class="eyebrow">Board</p><h2 id="columnDialogTitle">Nuova colonna</h2></div>
+        <button class="ghost-icon dialog-close" type="button" aria-label="Chiudi"><i data-lucide="x"></i></button>
+      </div>
+      <label class="field"><span>Nome</span><input id="columnName" maxlength="80" required autocomplete="off"></label>
+      <input id="columnId" type="hidden">
+      <div class="modal-actions">
+        <button class="button ghost dialog-cancel" type="button">Annulla</button>
+        <button class="button primary" type="submit">Salva</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="boardDialog" class="modal">
+    <form id="boardForm" method="dialog" class="modal-card compact">
+      <div class="modal-head">
+        <div><p class="eyebrow">Workspace</p><h2>Rinomina board</h2></div>
+        <button class="ghost-icon dialog-close" type="button" aria-label="Chiudi"><i data-lucide="x"></i></button>
+      </div>
+      <label class="field"><span>Nome board</span><input id="boardName" maxlength="100" required autocomplete="off"></label>
+      <div class="modal-actions">
+        <button class="button ghost dialog-cancel" type="button">Annulla</button>
+        <button class="button primary" type="submit">Salva</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="cardDialog" class="modal card-modal">
+    <form id="cardForm" method="dialog" class="modal-card">
+      <div class="modal-head">
+        <div><p class="eyebrow" id="cardColumnLabel">Card</p><h2 id="cardDialogTitle">Nuova attività</h2></div>
+        <button class="ghost-icon dialog-close" type="button" aria-label="Chiudi"><i data-lucide="x"></i></button>
+      </div>
+      <input id="cardId" type="hidden">
+      <input id="cardColumnId" type="hidden">
+      <label class="field"><span>Titolo</span><input id="cardTitle" maxlength="180" required autocomplete="off"></label>
+      <label class="field"><span>Descrizione</span><textarea id="cardDescription" rows="6" maxlength="10000" placeholder="Note, link, dettagli…"></textarea></label>
+      <div class="form-grid">
+        <label class="field"><span>Etichetta</span>
+          <select id="cardLabel">
+            <option value="">Nessuna</option>
+            <option value="magenta">Magenta</option>
+            <option value="amber">Ambra</option>
+            <option value="teal">Verde acqua</option>
+            <option value="blue">Blu</option>
+            <option value="violet">Viola</option>
+          </select>
+        </label>
+        <label class="field"><span>Scadenza</span><input id="cardDueDate" type="date"></label>
+      </div>
+      <div class="modal-actions split">
+        <button id="archiveCardBtn" class="button danger-text" type="button" hidden><i data-lucide="archive"></i> Archivia</button>
+        <div>
+          <button class="button ghost dialog-cancel" type="button">Annulla</button>
+          <button class="button primary" type="submit">Salva</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="columnTemplate">
+    <article class="column" data-column-id="">
+      <header class="column-head">
+        <div class="column-title-wrap">
+          <span class="column-grip" aria-hidden="true"><i data-lucide="grip-vertical"></i></span>
+          <h2 class="column-title"></h2>
+          <span class="column-count"></span>
+        </div>
+        <div class="column-menu-wrap">
+          <button class="ghost-icon column-menu-btn" type="button" aria-label="Azioni colonna"><i data-lucide="ellipsis"></i></button>
+          <div class="popover column-popover" hidden>
+            <button type="button" data-action="rename-column"><i data-lucide="pencil"></i> Rinomina</button>
+            <button type="button" data-action="delete-column" class="danger-text"><i data-lucide="trash-2"></i> Elimina</button>
+          </div>
+        </div>
+      </header>
+      <div class="card-list"></div>
+      <button class="add-card-btn" type="button"><i data-lucide="plus"></i> Aggiungi card</button>
+    </article>
+  </template>
+
+  <template id="cardTemplate">
+    <article class="task-card" tabindex="0" data-card-id="">
+      <div class="task-accent"></div>
+      <div class="task-card-body">
+        <div class="task-topline">
+          <span class="task-label" hidden></span>
+          <button class="card-edit ghost-icon" type="button" aria-label="Modifica card"><i data-lucide="pencil"></i></button>
+        </div>
+        <h3 class="task-title"></h3>
+        <p class="task-description" hidden></p>
+        <footer class="task-meta">
+          <span class="task-due" hidden><i data-lucide="calendar-days"></i><span></span></span>
+        </footer>
+      </div>
+    </article>
+  </template>
+
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script src="js/app.js?v=0.1.0" defer></script>
+</body>
+</html>
