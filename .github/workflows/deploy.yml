@@ -60,6 +60,7 @@ jobs:
           set -euo pipefail
           php -l api/index.php
           node --check js/app.js
+          node tests/ui-contract.mjs
           node - <<'NODE'
           const fs = require('fs');
           const source = fs.readFileSync('js/app.js', 'utf8');
@@ -84,6 +85,22 @@ jobs:
           cp assets/app.css dist/assets/
           cp js/app.js dist/js/
           cp api/index.php dist/api/
+
+          # Cache-bust frontend assets on every deployment so clients never keep
+          # an older app.js/app.css after an interaction fix.
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          path = Path('dist/index.html')
+          html = path.read_text(encoding='utf-8')
+          sha = os.environ['GITHUB_SHA']
+          html = re.sub(r'assets/app\.css\?v=[^"]+', f'assets/app.css?v={sha}', html)
+          html = re.sub(r'js/app\.js\?v=[^"]+', f'js/app.js?v={sha}', html)
+          path.write_text(html, encoding='utf-8')
+          PY
+
+          grep -Fq "assets/app.css?v=$GITHUB_SHA" dist/index.html
+          grep -Fq "js/app.js?v=$GITHUB_SHA" dist/index.html
           find dist -type f -print
 
       - name: Build private runtime config
@@ -177,6 +194,8 @@ jobs:
           grep -Fq '<title>PRJ · Project Board</title>' /tmp/prj-live.html
           grep -Fq 'id="workspaceSelect"' /tmp/prj-live.html
           grep -Fq 'id="registerForm"' /tmp/prj-live.html
+          grep -Fq "assets/app.css?v=${GITHUB_SHA}" /tmp/prj-live.html
+          grep -Fq "js/app.js?v=${GITHUB_SHA}" /tmp/prj-live.html
 
           curl -fsSL --retry 4 --retry-delay 2 -H 'Cache-Control: no-cache' \
             "https://prj.curromatteo.it/api/index.php?action=health&deploy=${GITHUB_SHA}" -o /tmp/prj-health.json
