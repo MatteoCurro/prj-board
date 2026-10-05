@@ -27,6 +27,7 @@ jobs:
       DB_USER: ${{ secrets.DB_USER }}
       DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
       APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+      AUTOMATION_KEY: ${{ secrets.AUTOMATION_KEY }}
       SMTP_USER: ${{ secrets.SMTP_USER }}
       SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -62,6 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           php -l api/index.php
+          php -l api/automation.php
           php -l lib/mailer.php
           php -l lib/digest.php
           php -l lib/calendar.php
@@ -92,7 +94,7 @@ jobs:
           cp index.html .htaccess dist/
           cp assets/app.css dist/assets/
           cp js/app.js dist/js/
-          cp api/index.php api/calendar.php dist/api/
+          cp api/index.php api/calendar.php api/automation.php dist/api/
           cp lib/mailer.php lib/digest.php lib/calendar.php dist/lib/
           cp jobs/digest.php dist/jobs/
 
@@ -127,6 +129,7 @@ jobs:
           smtp_user = os.environ.get("SMTP_USER", "").strip()
           smtp_password = os.environ.get("SMTP_PASSWORD", "")
           resend_api_key = os.environ.get("RESEND_API_KEY", "").strip()
+          automation_key = os.environ.get("AUTOMATION_KEY", "").strip()
           if bool(smtp_user) != bool(smtp_password):
               raise SystemExit("SMTP_USER and SMTP_PASSWORD must be configured together.")
 
@@ -163,6 +166,7 @@ jobs:
               'db_user' => %s,
               'db_pass' => %s,
               'app_password' => %s,
+              'automation_key' => %s,
               'app_url' => 'https://prj.curromatteo.it',
               'mail_from' => %s,
               'mail_from_name' => 'PRJ',
@@ -182,6 +186,7 @@ jobs:
               php_string(os.environ["DB_USER"]),
               php_string(os.environ["DB_PASSWORD"]),
               php_string(os.environ["APP_PASSWORD"]),
+              php_string(automation_key),
               php_string(sender),
               php_string(mail_provider),
               php_string("smtp" if use_authenticated_smtp else "php-mail"),

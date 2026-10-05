@@ -76,9 +76,16 @@
         </section>
 
         <div class="quick-filter-bar" aria-label="Filtri rapidi">
-          <button class="quick-filter active" type="button" data-quick-filter="all"><i data-lucide="layout-grid"></i> Tutte</button>
-          <button class="quick-filter" type="button" data-quick-filter="mine"><i data-lucide="user-round-check"></i> Mie</button>
-          <button class="quick-filter" type="button" data-quick-filter="due"><i data-lucide="clock-3"></i> In scadenza</button>
+          <div class="quick-filter-group">
+            <button class="quick-filter active" type="button" data-quick-filter="all"><i data-lucide="layout-grid"></i> Tutte</button>
+            <button class="quick-filter" type="button" data-quick-filter="mine"><i data-lucide="user-round-check"></i> Mie</button>
+            <button class="quick-filter" type="button" data-quick-filter="due"><i data-lucide="clock-3"></i> In scadenza</button>
+          </div>
+          <label class="automation-switch" title="Mostra anche le card create automaticamente">
+            <input id="automationViewToggle" type="checkbox">
+            <span class="automation-switch-track" aria-hidden="true"></span>
+            <span class="automation-switch-label"><i data-lucide="sparkles"></i> Automazioni</span>
+          </label>
         </div>
 
         <section id="board" class="board" aria-label="Project board"></section>
@@ -285,6 +292,10 @@
       </div>
       <input id="cardId" type="hidden"><input id="cardColumnId" type="hidden">
       <label class="field"><span>Titolo</span><input id="cardTitle" maxlength="180" required autocomplete="off"></label>
+      <div id="cardSourceInfo" class="card-source-info" hidden>
+        <span><i data-lucide="sparkles"></i> Creata da automazione</span>
+        <a id="cardSourceLink" href="#" target="_blank" rel="noopener" hidden>Apri origine <i data-lucide="external-link"></i></a>
+      </div>
       <label class="field"><span>Descrizione</span><textarea id="cardDescription" rows="6" maxlength="10000" placeholder="Note, link, dettagli…"></textarea></label>
       <div class="form-grid">
         <label class="field"><span>Etichetta</span><select id="cardLabel"><option value="">Nessuna</option><option value="magenta">Magenta</option><option value="amber">Ambra</option><option value="teal">Verde acqua</option><option value="blue">Blu</option><option value="violet">Viola</option></select></label>
@@ -295,8 +306,10 @@
         <div class="due-date-control">
           <button id="dueDatePickerBtn" class="due-calendar-btn" type="button" aria-label="Apri calendario" title="Apri calendario"><i data-lucide="calendar-days"></i></button>
           <input id="cardDueDate" type="date">
+          <input id="cardDueTime" type="time" aria-label="Ora della scadenza" title="Ora opzionale">
           <button id="clearDueDateBtn" class="due-clear-btn" type="button" aria-label="Rimuovi scadenza" title="Rimuovi scadenza"><i data-lucide="x"></i></button>
         </div>
+        <small class="due-time-help">L’ora è opzionale. Se presente, il calendario crea un evento all’orario indicato.</small>
         <div class="due-quick-list" aria-label="Scadenze rapide">
           <button type="button" data-due-offset="0">Oggi</button>
           <button type="button" data-due-offset="1">Domani</button>
@@ -446,7 +459,7 @@
     <article class="task-card" tabindex="0" data-card-id="">
       <div class="task-accent"></div>
       <div class="task-card-body">
-        <div class="task-topline"><div class="task-flags"><span class="task-label" hidden></span><span class="task-priority" hidden></span></div><div class="task-quick-actions"><span class="card-drag-handle" title="Trascina"><i data-lucide="grip-vertical"></i></span><button class="card-complete ghost-icon" type="button" aria-label="Segna come fatto" title="Segna come fatto"><i data-lucide="circle-check-big"></i></button><button class="card-edit ghost-icon" type="button" aria-label="Modifica card"><i data-lucide="pencil"></i></button></div></div>
+        <div class="task-topline"><div class="task-flags"><span class="task-label" hidden></span><span class="task-priority" hidden></span><span class="task-source" hidden><i data-lucide="sparkles"></i> Auto</span></div><div class="task-quick-actions"><span class="card-drag-handle" title="Trascina"><i data-lucide="grip-vertical"></i></span><button class="card-complete ghost-icon" type="button" aria-label="Segna come fatto" title="Segna come fatto"><i data-lucide="circle-check-big"></i></button><button class="card-edit ghost-icon" type="button" aria-label="Modifica card"><i data-lucide="pencil"></i></button></div></div>
         <h3 class="task-title"></h3>
         <p class="task-description" hidden></p>
         <div class="task-assignees" hidden></div>

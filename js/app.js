@@ -1,7 +1,7 @@
 (() => {
 'use strict';
 const API='api/index.php';
-const state={user:null,workspaces:[],workspace:null,site:null,search:'',quickFilter:'all',completedView:false,cardSortables:[],columnSortable:null,status:null,memberTimer:null,calendarFeeds:null,cardChecklistDraft:[],myTasks:[]};
+const state={user:null,workspaces:[],workspace:null,site:null,search:'',quickFilter:'all',completedView:false,showAutomations:localStorage.getItem('prj_show_automations')==='1',cardSortables:[],columnSortable:null,status:null,memberTimer:null,calendarFeeds:null,cardChecklistDraft:[],myTasks:[]};
 const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const boardEl=$('#board'), emptyState=$('#emptyState'), toastRegion=$('#toastRegion');
 
@@ -73,9 +73,15 @@ function priorityInfo(value){
  })[value]||{label:'Normale',className:'normal'};
 }
 function checklistStats(items=[]){const total=items.length,done=items.filter(i=>i.done).length;return{total,done}}
-function taskDueLabel(value){
- const days=daysUntil(value);if(days===null)return'Senza scadenza';if(days<0)return'Scaduta da '+Math.abs(days)+(Math.abs(days)===1?' giorno':' giorni');if(days===0)return'Scade oggi';if(days===1)return'Scade domani';return'Scade tra '+days+' giorni';
+function taskDueLabel(value,time=null){
+ const days=daysUntil(value);if(days===null)return'Senza scadenza';
+ const timeLabel=time?(' · '+String(time).slice(0,5)):'';
+ if(days<0)return'Scaduta da '+Math.abs(days)+(Math.abs(days)===1?' giorno':' giorni')+timeLabel;
+ if(days===0)return'Scade oggi'+timeLabel;
+ if(days===1)return'Scade domani'+timeLabel;
+ return'Scade tra '+days+' giorni'+timeLabel;
 }
+function cardMatchesAutomation(card){return state.showAutomations||(card.source||'manual')==='manual'}
 function cardMatchesQuickFilter(card){
  if(state.quickFilter==='mine')return (card.assignees||[]).some(u=>Number(u.id)===Number(state.user?.id));
  if(state.quickFilter==='due'){const days=daysUntil(card.due_date);return days!==null&&days<=7}
@@ -92,15 +98,15 @@ function tagMix(tags=[]){
 function renderWorkspace(){
  destroySortables();boardEl.innerHTML='';const ws=state.workspace;if(!ws)return;
  $('#boardTitle').textContent=ws.name;setWorkspaceAvatar($('#workspaceAvatar'),ws);setWorkspaceAvatar($('#workspaceMiniAvatar'),ws);
- const activeTotal=ws.columns.reduce((n,c)=>n+c.cards.filter(card=>!card.completed).length,0);
- const completedTotal=ws.columns.reduce((n,c)=>n+c.cards.filter(card=>card.completed).length,0);
+ const activeTotal=ws.columns.reduce((n,c)=>n+c.cards.filter(card=>!card.completed&&cardMatchesAutomation(card)).length,0);
+ const completedTotal=ws.columns.reduce((n,c)=>n+c.cards.filter(card=>card.completed&&cardMatchesAutomation(card)).length,0);
  $('#boardMeta').textContent=ws.columns.length+(ws.columns.length===1?' colonna':' colonne')+' · '+activeTotal+' attive · '+completedTotal+' completate · '+roleLabel(ws.role);
- $('#completedViewToggle').checked=state.completedView;
- $$('.quick-filter').forEach(b=>b.classList.toggle('active',b.dataset.quickFilter===state.quickFilter));
+ $('#completedViewToggle').checked=state.completedView;$('#automationViewToggle').checked=state.showAutomations;
+ $('.quick-filter').forEach(b=>b.classList.toggle('active',b.dataset.quickFilter===state.quickFilter));
  emptyState.hidden=ws.columns.length>0;boardEl.hidden=ws.columns.length===0;
  $('#addColumnBtn').hidden=!canEdit()||state.completedView;$('#emptyAddColumnBtn').hidden=!canEdit();$('#editWorkspaceBtn').hidden=!canAdminWorkspace();$('#adminBtn').hidden=!(state.user?.is_admin||canAdminWorkspace());$('#calendarBtn').hidden=false;
  ws.columns.forEach(col=>{
-  const f=$('#columnTemplate').content.cloneNode(true),el=$('.column',f),mix=tagMix(col.tags),visibleCards=col.cards.filter(card=>Boolean(card.completed)===state.completedView&&cardMatchesQuickFilter(card));
+  const f=$('#columnTemplate').content.cloneNode(true),el=$('.column',f),mix=tagMix(col.tags),visibleCards=col.cards.filter(card=>Boolean(card.completed)===state.completedView&&cardMatchesAutomation(card)&&cardMatchesQuickFilter(card));
   el.dataset.columnId=col.id;el.style.setProperty('--tag-bg',mix.column);el.style.setProperty('--tag-solid',mix.solid);
   $('.column-title',f).textContent=col.name;$('.column-count',f).textContent=visibleCards.length;
   const tagBox=$('.column-tags',f);(col.tags||[]).forEach(t=>tagBox.append(tagPill(t)));
@@ -120,9 +126,9 @@ function localDateValue(offset=0){
  return y+'-'+m+'-'+day;
 }
 function updateDueQuickState(){
- const input=$('#cardDueDate'),value=input.value;
- $$('.due-quick-list [data-due-offset]').forEach(btn=>btn.classList.toggle('active',value===localDateValue(btn.dataset.dueOffset)));
- $('#clearDueDateBtn').disabled=!value;
+ const input=$('#cardDueDate'),value=input.value,time=$('#cardDueTime');
+ $('.due-quick-list [data-due-offset]').forEach(btn=>btn.classList.toggle('active',value===localDateValue(btn.dataset.dueOffset)));
+ $('#clearDueDateBtn').disabled=!value;time.disabled=!value;if(!value)time.value='';
 }
 function setDueDate(value){$('#cardDueDate').value=value||'';updateDueQuickState()}
 function openDueDatePicker(){
@@ -144,7 +150,8 @@ function renderCard(card,columnTags=[]){
  const lab=$('.task-label',f);if(card.label){lab.textContent=({magenta:'Focus',amber:'Attesa',teal:'Pronto',blue:'Info',violet:'Idea'})[card.label]||card.label;lab.hidden=false}
  const priority=$('.task-priority',f),pInfo=priorityInfo(card.priority);if(card.priority&&card.priority!=='normal'){priority.textContent=pInfo.label;priority.classList.add(pInfo.className);priority.hidden=false}
  const people=$('.task-assignees',f);if(card.assignees?.length){card.assignees.forEach(u=>{const pill=document.createElement('span');pill.className='assignee-pill';pill.textContent=userDisplayName(u);pill.title=u.display_name?userDisplayName(u)+' · @'+u.username:'@'+u.username;people.append(pill)});people.hidden=false}
- const due=$('.task-due',f);if(card.due_date){const st=card.completed?null:dueState(card.due_date);$('span',due).textContent=(st?.label?st.label+' · ':'')+new Intl.DateTimeFormat('it-IT',{day:'numeric',month:'short'}).format(new Date(card.due_date+'T12:00:00'));due.hidden=false;const ic=$('.task-due-icon',due);ic.setAttribute('data-lucide',st?.icon||'calendar-days');if(st?.className)el.classList.add(st.className)}
+ const due=$('.task-due',f);if(card.due_date){const st=card.completed?null:dueState(card.due_date),time=card.due_time?(' · '+String(card.due_time).slice(0,5)):'';$('span',due).textContent=(st?.label?st.label+' · ':'')+new Intl.DateTimeFormat('it-IT',{day:'numeric',month:'short'}).format(new Date(card.due_date+'T12:00:00'))+time;due.hidden=false;const ic=$('.task-due-icon',due);ic.setAttribute('data-lucide',card.due_time?'clock-3':(st?.icon||'calendar-days'));if(st?.className)el.classList.add(st.className)}
+ const source=$('.task-source',f);if((card.source||'manual')!=='manual'){source.hidden=false;source.title=card.source==='gmail'?'Creata da Gmail':'Creata da automazione'}
  const cs=checklistStats(card.checklist||[]),cc=$('.checklist-count',f);if(cs.total){$('span',cc).textContent=cs.done+'/'+cs.total;cc.hidden=false;if(cs.done===cs.total)cc.classList.add('complete')}
  const ac=$('.attachment-count',f);if(card.attachments?.length){$('span',ac).textContent=card.attachments.length;ac.hidden=false}
  const quick=$('.card-complete',f);quick.title=card.completed?'Riapri card':'Segna come fatto';quick.setAttribute('aria-label',quick.title);$('i',quick).setAttribute('data-lucide',card.completed?'rotate-ccw':'circle-check-big');
@@ -156,8 +163,8 @@ function renderCard(card,columnTags=[]){
 function bindGlobalEvents(){
  $('#workspaceSelect').addEventListener('change',e=>selectWorkspace(Number(e.target.value)));$('#newWorkspaceBtn').addEventListener('click',()=>openWorkspaceDialog());$('#editWorkspaceBtn').addEventListener('click',()=>openWorkspaceDialog(state.workspace));$('#refreshBtn').addEventListener('click',()=>loadWorkspace());$('#addColumnBtn').addEventListener('click',()=>openColumnDialog());$('#emptyAddColumnBtn').addEventListener('click',()=>openColumnDialog());
  $('#adminBtn').addEventListener('click',openAdmin);$('#calendarBtn').addEventListener('click',openCalendarDialog);$('#myTasksBtn').addEventListener('click',openMyTasks);$('#refreshMyTasksBtn').addEventListener('click',()=>loadMyTasks(false));$('#userChip').addEventListener('click',openProfile);$('#logoutBtn').addEventListener('click',async()=>{try{await api('logout',{body:{}})}catch{}location.reload()});
- $('#searchInput').addEventListener('input',e=>{state.search=e.target.value.trim().toLowerCase();applySearch()});$('#completedViewToggle').addEventListener('change',e=>{state.completedView=e.target.checked;renderWorkspace()});
- $$('.quick-filter').forEach(b=>b.addEventListener('click',()=>{state.quickFilter=b.dataset.quickFilter||'all';renderWorkspace()}));
+ $('#searchInput').addEventListener('input',e=>{state.search=e.target.value.trim().toLowerCase();applySearch()});$('#completedViewToggle').addEventListener('change',e=>{state.completedView=e.target.checked;renderWorkspace()});$('#automationViewToggle').addEventListener('change',e=>{state.showAutomations=e.target.checked;localStorage.setItem('prj_show_automations',state.showAutomations?'1':'0');renderWorkspace();renderMyTasks();refreshMyTasksBadge()});
+ $('.quick-filter').forEach(b=>b.addEventListener('click',()=>{state.quickFilter=b.dataset.quickFilter||'all';renderWorkspace()}));
  $('#showLoginBtn').addEventListener('click',()=>toggleAuth('login'));$('#showRegisterBtn').addEventListener('click',()=>toggleAuth('register'));$('#showRecoverBtn').addEventListener('click',()=>toggleAuth('recover'));$('#backToLoginBtn').addEventListener('click',()=>toggleAuth('login'));
  $('#loginForm').addEventListener('submit',login);$('#registerForm').addEventListener('submit',register);$('#recoverForm').addEventListener('submit',recoverAdmin);
  $('#workspaceForm').addEventListener('submit',saveWorkspace);$('#columnForm').addEventListener('submit',saveColumn);$('#manageTagsBtn').addEventListener('click',openTagManager);$('#tagForm').addEventListener('submit',saveTag);$('#cancelTagEditBtn').addEventListener('click',resetTagForm);
@@ -215,7 +222,7 @@ function findCard(id){for(const col of state.workspace?.columns||[]){const c=col
 async function refreshMyTasksBadge(){
  try{
   const d=await api('my:tasks');state.myTasks=d.tasks||[];
-  const count=state.myTasks.length,badge=$('#myTasksBadge');badge.hidden=!count;badge.textContent=count>99?'99+':String(count);
+  const count=state.myTasks.filter(cardMatchesAutomation).length,badge=$('#myTasksBadge');badge.hidden=!count;badge.textContent=count>99?'99+':String(count);
  }catch{}
 }
 async function openMyTasks(){
@@ -226,11 +233,11 @@ async function loadMyTasks(silent=false){
  if(!silent){list.innerHTML='<div class="empty-list">Caricamento attività…</div>';summary.textContent='Caricamento…'}
  try{
   const d=await api('my:tasks');state.myTasks=d.tasks||[];renderMyTasks();
-  const badge=$('#myTasksBadge'),count=state.myTasks.length;badge.hidden=!count;badge.textContent=count>99?'99+':String(count);
+  const badge=$('#myTasksBadge'),count=state.myTasks.filter(cardMatchesAutomation).length;badge.hidden=!count;badge.textContent=count>99?'99+':String(count);
  }catch(e){if(!silent){list.innerHTML='<div class="empty-list"></div>';$('.empty-list',list).textContent=e.message;summary.textContent='Impossibile caricare le attività'}}
 }
 function renderMyTasks(){
- const list=$('#myTasksList'),tasks=state.myTasks||[];list.innerHTML='';
+ const list=$('#myTasksList'),tasks=(state.myTasks||[]).filter(cardMatchesAutomation);list.innerHTML='';
  const overdue=tasks.filter(t=>daysUntil(t.due_date)!==null&&daysUntil(t.due_date)<0).length;
  const dueSoon=tasks.filter(t=>{const d=daysUntil(t.due_date);return d!==null&&d>=0&&d<=7}).length;
  $('#myTasksSummary').textContent=tasks.length+' attività · '+overdue+' scadute · '+dueSoon+' entro 7 giorni';
@@ -244,7 +251,7 @@ function renderMyTasks(){
   head.append(title,priority);
   const context=document.createElement('span');context.className='my-task-context';context.textContent=task.workspace_name+' · '+task.column_name;
   const meta=document.createElement('div');meta.className='my-task-meta';
-  const due=document.createElement('span');due.className='my-task-due';due.textContent=taskDueLabel(task.due_date);const days=daysUntil(task.due_date);if(days!==null&&days<0)due.classList.add('overdue');else if(days!==null&&days<=2)due.classList.add('soon');
+  const due=document.createElement('span');due.className='my-task-due';due.textContent=taskDueLabel(task.due_date,task.due_time);const days=daysUntil(task.due_date);if(days!==null&&days<0)due.classList.add('overdue');else if(days!==null&&days<=2)due.classList.add('soon');
   meta.append(due);
   if(task.checklist_total){const check=document.createElement('span');check.innerHTML='<i data-lucide="list-checks"></i><span></span>';$('span',check).textContent=task.checklist_done+'/'+task.checklist_total;meta.append(check)}
   main.append(head,context,meta);
@@ -350,12 +357,13 @@ function addChecklistItem(){
 
 function openCardDialog(card=null,columnId){
  const col=findColumn(columnId||card?.column_id);
- $('#cardId').value=card?.id||'';$('#cardColumnId').value=col?.id||'';$('#cardTitle').value=card?.title||'';$('#cardDescription').value=card?.description||'';$('#cardLabel').value=card?.label||'';$('#cardPriority').value=card?.priority||'normal';$('#cardDueDate').value=card?.due_date||'';updateDueQuickState();
+ $('#cardId').value=card?.id||'';$('#cardColumnId').value=col?.id||'';$('#cardTitle').value=card?.title||'';$('#cardDescription').value=card?.description||'';$('#cardLabel').value=card?.label||'';$('#cardPriority').value=card?.priority||'normal';$('#cardDueDate').value=card?.due_date||'';$('#cardDueTime').value=card?.due_time?String(card.due_time).slice(0,5):'';updateDueQuickState();
+ const sourceInfo=$('#cardSourceInfo'),sourceLink=$('#cardSourceLink'),automated=!!card&&(card.source||'manual')!=='manual';sourceInfo.hidden=!automated;sourceLink.hidden=!automated||!card?.source_url;if(automated&&card?.source_url)sourceLink.href=card.source_url;else sourceLink.removeAttribute('href');
  state.cardChecklistDraft=(card?.checklist||[]).map(item=>({text:item.text,done:!!item.done}));$('#checklistNewItem').value='';renderChecklistDraft();$('#checklistComposer').hidden=!canEdit();
  $('#cardColumnLabel').textContent=col?.name||'Card';$('#cardDialogTitle').textContent=card?'Dettaglio attività':'Nuova attività';$('#archiveCardBtn').hidden=!card||!canEdit();$('#completeCardBtn').hidden=!card||!canEdit();
  if(card){const completeBtn=$('#completeCardBtn');$('span',completeBtn).textContent=card.completed?'Riapri':'Segna fatto';const oldIcon=$('svg,i',completeBtn);const newIcon=document.createElement('i');newIcon.setAttribute('data-lucide',card.completed?'rotate-ccw':'circle-check-big');if(oldIcon)oldIcon.replaceWith(newIcon);else completeBtn.prepend(newIcon)}
  $('#saveCardBtn').hidden=!canEdit();$('#attachmentUploadField').hidden=!canEdit();$('#cardFiles').value='';$('#selectedFiles').innerHTML='';renderAttachments(card?.attachments||[]);renderAssigneeChoices(card?.assignees||[]);
- $$('#cardForm input,#cardForm textarea,#cardForm select').forEach(i=>{if(!['cardId','cardColumnId','cardFiles','checklistNewItem'].includes(i.id))i.disabled=!canEdit()});
+ $('#cardForm input,#cardForm textarea,#cardForm select').forEach(i=>{if(!['cardId','cardColumnId','cardFiles','checklistNewItem'].includes(i.id))i.disabled=!canEdit()||(i.id==='cardDueTime'&&!$('#cardDueDate').value)});
  $('#cardDialog').showModal();icons();if(canEdit())setTimeout(()=>$('#cardTitle').focus(),30)
 }
 
@@ -364,7 +372,7 @@ function renderAttachments(items){const box=$('#attachmentList');box.innerHTML='
 function renderSelectedFiles(){const box=$('#selectedFiles');box.innerHTML='';[...$('#cardFiles').files].forEach(f=>{const row=document.createElement('div');row.className='selected-file';row.textContent=f.name+' · '+humanSize(f.size);box.append(row)})}
 async function uploadAttachments(cardId,files){if(!files.length)return;const fd=new FormData();fd.append('workspace_id',state.workspace.id);fd.append('card_id',cardId);files.forEach(f=>fd.append('files[]',f));const res=await fetch(API+'?action=attachment:upload',{method:'POST',credentials:'same-origin',body:fd,headers:{Accept:'application/json'}});let data;try{data=await res.json()}catch{throw new Error('Risposta upload non valida.')}if(!res.ok||!data.ok)throw new Error(data.error||'Upload non riuscito.')}
 async function deleteAttachment(id){if(!confirm('Rimuovere questo allegato?'))return;try{await api('attachment:delete',{body:{id}});await loadWorkspace();const c=findCard($('#cardId').value);renderAttachments(c?.attachments||[])}catch(e){toast(e.message,'error')}}
-async function saveCard(e){e.preventDefault();if(!canEdit())return;const id=$('#cardId').value,files=[...$('#cardFiles').files],body={workspace_id:state.workspace.id,column_id:$('#cardColumnId').value,title:$('#cardTitle').value.trim(),description:$('#cardDescription').value.trim(),label:$('#cardLabel').value,priority:$('#cardPriority').value,due_date:$('#cardDueDate').value||null,assignee_ids:$$('#cardAssigneeChoices input:checked').map(i=>Number(i.value)),checklist:(state.cardChecklistDraft||[]).map(i=>({text:(i.text||'').trim(),done:!!i.done})).filter(i=>i.text)};if(id)body.id=id;try{setBusy(true);const d=await api(id?'card:update':'card:create',{body});const cardId=id?Number(id):Number(d.id);if(files.length)await uploadAttachments(cardId,files);$('#cardDialog').close();await loadWorkspace();refreshMyTasksBadge();toast(files.length?'Card e allegati salvati.':'Card salvata.')}catch(x){toast(x.message,'error')}finally{setBusy(false)}}
+async function saveCard(e){e.preventDefault();if(!canEdit())return;const id=$('#cardId').value,files=[...$('#cardFiles').files],body={workspace_id:state.workspace.id,column_id:$('#cardColumnId').value,title:$('#cardTitle').value.trim(),description:$('#cardDescription').value.trim(),label:$('#cardLabel').value,priority:$('#cardPriority').value,due_date:$('#cardDueDate').value||null,due_time:$('#cardDueDate').value?($('#cardDueTime').value||null):null,assignee_ids:$$('#cardAssigneeChoices input:checked').map(i=>Number(i.value)),checklist:(state.cardChecklistDraft||[]).map(i=>({text:(i.text||'').trim(),done:!!i.done})).filter(i=>i.text)};if(id)body.id=id;try{setBusy(true);const d=await api(id?'card:update':'card:create',{body});const cardId=id?Number(id):Number(d.id);if(files.length)await uploadAttachments(cardId,files);$('#cardDialog').close();await loadWorkspace();refreshMyTasksBadge();toast(files.length?'Card e allegati salvati.':'Card salvata.')}catch(x){toast(x.message,'error')}finally{setBusy(false)}}
 async function setCardCompleted(id,completed){try{await api('card:complete',{body:{workspace_id:state.workspace.id,id,completed}});await loadWorkspace();refreshMyTasksBadge();toast(completed?'Card completata.':'Card riaperta.')}catch(x){toast(x.message,'error')}}
 async function completeCurrentCard(){const id=Number($('#cardId').value);if(!id)return;const card=findCard(id);if(!card)return;$('#cardDialog').close();await setCardCompleted(id,!card.completed)}
 async function archiveCurrentCard(){const id=$('#cardId').value;if(!id||!confirm('Archiviare questa card?'))return;try{await api('card:archive',{body:{workspace_id:state.workspace.id,id}});$('#cardDialog').close();await loadWorkspace();refreshMyTasksBadge()}catch(x){toast(x.message,'error')}}

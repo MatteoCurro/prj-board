@@ -294,7 +294,7 @@ function workspacePayload(PDO $pdo, int $workspaceId, string $role): array {
         }
 
         $stmt = $pdo->prepare("
-            SELECT id, column_id, title, description, label, due_date, priority, position, completed, completed_at, updated_at
+            SELECT id, column_id, title, description, label, due_date, due_time, priority, source, source_external_id, source_url, automation_confidence, position, completed, completed_at, updated_at
             FROM cards
             WHERE archived = 0 AND column_id IN ($marks)
             ORDER BY column_id, completed, position, id
@@ -469,6 +469,12 @@ try {
             description TEXT NULL,
             label VARCHAR(24) NOT NULL DEFAULT '',
             due_date DATE NULL,
+            due_time TIME NULL,
+            priority VARCHAR(16) NOT NULL DEFAULT 'normal',
+            source VARCHAR(24) NOT NULL DEFAULT 'manual',
+            source_external_id VARCHAR(191) NULL,
+            source_url VARCHAR(500) NULL,
+            automation_confidence DECIMAL(5,4) NULL,
             position INT NOT NULL DEFAULT 1000,
             archived TINYINT(1) NOT NULL DEFAULT 0,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -486,8 +492,23 @@ try {
     if (!columnExists($pdo, 'cards', 'completed_at')) {
         $pdo->exec("ALTER TABLE cards ADD COLUMN completed_at DATETIME NULL AFTER completed");
     }
+    if (!columnExists($pdo, 'cards', 'due_time')) {
+        $pdo->exec("ALTER TABLE cards ADD COLUMN due_time TIME NULL AFTER due_date");
+    }
     if (!columnExists($pdo, 'cards', 'priority')) {
-        $pdo->exec("ALTER TABLE cards ADD COLUMN priority VARCHAR(16) NOT NULL DEFAULT 'normal' AFTER due_date");
+        $pdo->exec("ALTER TABLE cards ADD COLUMN priority VARCHAR(16) NOT NULL DEFAULT 'normal' AFTER due_time");
+    }
+    if (!columnExists($pdo, 'cards', 'source')) {
+        $pdo->exec("ALTER TABLE cards ADD COLUMN source VARCHAR(24) NOT NULL DEFAULT 'manual' AFTER priority");
+    }
+    if (!columnExists($pdo, 'cards', 'source_external_id')) {
+        $pdo->exec("ALTER TABLE cards ADD COLUMN source_external_id VARCHAR(191) NULL AFTER source");
+    }
+    if (!columnExists($pdo, 'cards', 'source_url')) {
+        $pdo->exec("ALTER TABLE cards ADD COLUMN source_url VARCHAR(500) NULL AFTER source_external_id");
+    }
+    if (!columnExists($pdo, 'cards', 'automation_confidence')) {
+        $pdo->exec("ALTER TABLE cards ADD COLUMN automation_confidence DECIMAL(5,4) NULL AFTER source_url");
     }
 
     $pdo->exec("
@@ -854,7 +875,7 @@ try {
 
         case 'my:tasks': {
             $stmt = $pdo->prepare("
-                SELECT c.id, c.column_id, c.title, c.description, c.due_date, c.priority, c.updated_at,
+                SELECT c.id, c.column_id, c.title, c.description, c.due_date, c.due_time, c.priority, c.source, c.source_url, c.updated_at,
                        bc.name column_name, b.id workspace_id, b.name workspace_name, b.logo_url workspace_logo_url,
                        (SELECT COUNT(*) FROM card_checklist ci WHERE ci.card_id = c.id) checklist_total,
                        (SELECT COUNT(*) FROM card_checklist ci WHERE ci.card_id = c.id AND ci.is_done = 1) checklist_done
@@ -865,7 +886,7 @@ try {
                 WHERE ca.user_id = ?
                   AND c.archived = 0
                   AND c.completed = 0
-                ORDER BY (c.due_date IS NULL), c.due_date,
+                ORDER BY (c.due_date IS NULL), c.due_date, (c.due_time IS NULL), c.due_time,
                          FIELD(c.priority, 'urgent', 'high', 'normal', 'low'),
                          b.position, bc.position, c.position, c.id
             ");
@@ -1028,9 +1049,13 @@ try {
             $description = cleanText($body['description'] ?? '', 10000);
             $label = cleanText($body['label'] ?? '', 24);
             $dueDate = !empty($body['due_date']) ? (string)$body['due_date'] : null;
+            $dueTime = !empty($body['due_time']) ? (string)$body['due_time'] : null;
             $priority = (string)($body['priority'] ?? 'normal');
             if ($title === '') fail('Inserisci il titolo della card.');
             if ($dueDate !== null && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate)) fail('Data non valida.');
+            if ($dueTime !== null && !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/', $dueTime)) fail('Ora non valida.');
+            if ($dueDate === null) $dueTime = null;
+            if ($dueTime !== null && strlen($dueTime) === 5) $dueTime .= ':00';
             if (!in_array($priority, ['low', 'normal', 'high', 'urgent'], true)) fail('Priorità non valida.');
 
             $stmt = $pdo->prepare("SELECT id FROM board_columns WHERE id = ? AND board_id = ?");
@@ -1042,9 +1067,9 @@ try {
             $position = (int)$stmt->fetchColumn();
             $pdo->beginTransaction();
             $pdo->prepare("
-                INSERT INTO cards (column_id, title, description, label, due_date, priority, position)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ")->execute([$columnId, $title, $description, $label, $dueDate, $priority, $position]);
+                INSERT INTO cards (column_id, title, description, label, due_date, due_time, priority, source, position)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'manual', ?)
+            ")->execute([$columnId, $title, $description, $label, $dueDate, $dueTime, $priority, $position]);
             $cardId = (int)$pdo->lastInsertId();
             syncCardAssignees(
                 $pdo,
@@ -1070,19 +1095,23 @@ try {
             $description = cleanText($body['description'] ?? '', 10000);
             $label = cleanText($body['label'] ?? '', 24);
             $dueDate = !empty($body['due_date']) ? (string)$body['due_date'] : null;
+            $dueTime = !empty($body['due_time']) ? (string)$body['due_time'] : null;
             $priority = (string)($body['priority'] ?? 'normal');
             if ($title === '') fail('Inserisci il titolo della card.');
             if ($dueDate !== null && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate)) fail('Data non valida.');
+            if ($dueTime !== null && !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/', $dueTime)) fail('Ora non valida.');
+            if ($dueDate === null) $dueTime = null;
+            if ($dueTime !== null && strlen($dueTime) === 5) $dueTime .= ':00';
             if (!in_array($priority, ['low', 'normal', 'high', 'urgent'], true)) fail('Priorità non valida.');
 
             $stmt = $pdo->prepare("
                 UPDATE cards c
                 JOIN board_columns bc ON bc.id = c.column_id
-                SET c.title = ?, c.description = ?, c.label = ?, c.due_date = ?, c.priority = ?
+                SET c.title = ?, c.description = ?, c.label = ?, c.due_date = ?, c.due_time = ?, c.priority = ?
                 WHERE c.id = ? AND bc.board_id = ? AND c.archived = 0
             ");
             $pdo->beginTransaction();
-            $stmt->execute([$title, $description, $label, $dueDate, $priority, $id, $workspaceId]);
+            $stmt->execute([$title, $description, $label, $dueDate, $dueTime, $priority, $id, $workspaceId]);
             syncCardAssignees(
                 $pdo,
                 $workspaceId,
