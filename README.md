@@ -19,7 +19,9 @@ Mini project board self-hosted, ispirata a Trello/Kan e ottimizzata per Gandi.
 - ricerca utenti attivi e associazione ai workspace
 - colonne con colore personalizzato
 - card riordinabili nella stessa colonna e tra colonne via SortableJS
-- card con titolo, descrizione, etichetta e scadenza
+- card con titolo, descrizione, etichetta e scadenza (ora opzionale)
+- card manuali o originate da automazioni, nascondibili dal workspace
+- endpoint protetto `api/automation.php` per leggere colonne/tag e creare o aggiornare card esterne senza duplicazioni
 - archivio card
 - ricerca client-side
 - persistenza MySQL
@@ -59,6 +61,7 @@ Gli utenti successivi possono registrarsi normalmente e compariranno nel pannell
 - `DB_USER`
 - `DB_PASSWORD`
 - `APP_PASSWORD`
+- `AUTOMATION_KEY` — opzionale; abilita l’endpoint di automazione esterna
 
 ## Database e migrazioni
 
@@ -83,3 +86,15 @@ Tabelle principali:
 - MySQL / MariaDB
 
 **Reuse first**: librerie piccole e consolidate dove utili, codice custom soltanto per dominio applicativo e permessi.
+
+
+## Automazioni esterne
+
+L’endpoint `api/automation.php` è disabilitato se `AUTOMATION_KEY` non è configurata.
+
+- `GET /api/automation.php?action=context` restituisce workspace, colonne e tag reali, così il classificatore non deve hardcodare le categorie.
+- `POST /api/automation.php?action=upsert` crea o aggiorna una card identificata da `source + source_external_id`.
+- Le card automatiche sono marcate con `source != manual` e possono essere mostrate/nascoste dall’interfaccia.
+- Per Gmail, `source_external_id` deve derivare stabilmente dal thread/azione per prevenire duplicazioni.
+
+Le notifiche di ticketing già gestite in sistemi dedicati devono essere filtrate dal bridge prima dell’upsert.
