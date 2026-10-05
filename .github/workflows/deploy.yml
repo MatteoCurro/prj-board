@@ -134,6 +134,7 @@ jobs:
               'smtp_port' => 25,
               'smtp_helo' => 'prj.curromatteo.it',
               'smtp_timeout' => 8,
+              'mail_fallback_php' => true,
           ];
           """ % tuple(php_string(os.environ[key]) for key in [
               "DB_HOST", "DB_NAME", "DB_USER", "DB_PASSWORD", "APP_PASSWORD"
@@ -260,9 +261,9 @@ jobs:
 
           node - <<'NODE'
           const x = require('/tmp/prj-health.json');
-          console.log('Health flags:', {ok:x.ok,schema:x.schema,has_workspace:x.has_workspace,has_column:x.has_column,uploads_writable:x.uploads_writable,mail_available:x.mail_available,smtp_available:x.smtp_available,smtp_ms:x.smtp_ms});
-          if (!x.ok || x.schema !== '1.2' || !x.has_workspace || !x.has_column || !x.uploads_writable || !x.mail_available || !x.smtp_available) process.exit(1);
-          console.log('PRJ health OK: schema 1.2, private uploads writable, local SMTP reachable in '+x.smtp_ms+'ms.');
+          console.log('Health flags:', {ok:x.ok,schema:x.schema,has_workspace:x.has_workspace,has_column:x.has_column,uploads_writable:x.uploads_writable,mail_available:x.mail_available,smtp_available:x.smtp_available,smtp_ms:x.smtp_ms,email_transport_available:x.email_transport_available,email_transport:x.email_transport});
+          if (!x.ok || x.schema !== '1.2' || !x.has_workspace || !x.has_column || !x.uploads_writable || !x.mail_available || !x.email_transport_available) process.exit(1);
+          console.log('PRJ health OK: schema 1.2, private uploads writable, email transport='+x.email_transport+'.');
           NODE
 
           SPF="$(dig +short TXT curromatteo.it 2>/dev/null | tr -d '"' || true)"
