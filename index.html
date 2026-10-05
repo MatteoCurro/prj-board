@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/app.css?v=0.5.1">
+  <link rel="stylesheet" href="assets/app.css?v=0.5.2">
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -206,7 +206,20 @@
       <label class="field"><span>Descrizione</span><textarea id="cardDescription" rows="6" maxlength="10000" placeholder="Note, link, dettagli…"></textarea></label>
       <div class="form-grid">
         <label class="field"><span>Etichetta</span><select id="cardLabel"><option value="">Nessuna</option><option value="magenta">Magenta</option><option value="amber">Ambra</option><option value="teal">Verde acqua</option><option value="blue">Blu</option><option value="violet">Viola</option></select></label>
-        <label class="field"><span>Scadenza</span><input id="cardDueDate" type="date"></label>
+        <div class="field due-field">
+          <span>Scadenza</span>
+          <div class="due-date-control">
+            <button id="dueDatePickerBtn" class="due-calendar-btn" type="button" aria-label="Apri calendario" title="Apri calendario"><i data-lucide="calendar-days"></i></button>
+            <input id="cardDueDate" type="date">
+            <button id="clearDueDateBtn" class="due-clear-btn" type="button" aria-label="Rimuovi scadenza" title="Rimuovi scadenza"><i data-lucide="x"></i></button>
+          </div>
+          <div class="due-quick-list" aria-label="Scadenze rapide">
+            <button type="button" data-due-offset="0">Oggi</button>
+            <button type="button" data-due-offset="1">Domani</button>
+            <button type="button" data-due-offset="2">+2 gg</button>
+            <button type="button" data-due-offset="7">+7 gg</button>
+          </div>
+        </div>
       </div>
 
       <div class="field">
@@ -335,6 +348,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-  <script src="js/app.js?v=0.5.1" defer></script>
+  <script src="js/app.js?v=0.5.2" defer></script>
 </body>
 </html>
