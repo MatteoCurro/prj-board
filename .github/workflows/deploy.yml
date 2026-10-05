@@ -62,7 +62,7 @@ jobs:
           node --check js/app.js
           test -f index.html
           test -f assets/app.css
-          grep -Fq 'Bricolage Grotesque' index.html
+          grep -Fq 'Bricolage+Grotesque' index.html
           grep -Fq 'Sortable.min.js' index.html
 
       - name: Build deployment payload
