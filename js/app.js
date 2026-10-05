@@ -148,7 +148,8 @@ function bindGlobalEvents(){
  $('#workspaceForm').addEventListener('submit',saveWorkspace);$('#columnForm').addEventListener('submit',saveColumn);$('#manageTagsBtn').addEventListener('click',openTagManager);$('#tagForm').addEventListener('submit',saveTag);$('#cancelTagEditBtn').addEventListener('click',resetTagForm);
  $('#cardForm').addEventListener('submit',saveCard);$('#completeCardBtn').addEventListener('click',completeCurrentCard);$('#archiveCardBtn').addEventListener('click',archiveCurrentCard);$('#cardFiles').addEventListener('change',renderSelectedFiles);
  $('#dueDatePickerBtn').addEventListener('click',openDueDatePicker);$('#clearDueDateBtn').addEventListener('click',()=>setDueDate(''));$('#cardDueDate').addEventListener('change',updateDueQuickState);$$('.due-quick-list [data-due-offset]').forEach(b=>b.addEventListener('click',()=>setDueDate(localDateValue(b.dataset.dueOffset))));
- $('#profileForm').addEventListener('submit',saveProfile);$('#profilePasswordForm').addEventListener('submit',changeOwnPassword);$('#resetPasswordForm').addEventListener('submit',resetUserPassword);$('#siteSettingsForm').addEventListener('submit',saveSiteSettings);
+ $('#profileForm').addEventListener('submit',saveProfile);$('#emailTestBtn').addEventListener('click',sendTestEmail);$('#profilePasswordForm').addEventListener('submit',changeOwnPassword);$('#resetPasswordForm').addEventListener('submit',resetUserPassword);$('#siteSettingsForm').addEventListener('submit',saveSiteSettings);
+ $('#profileNotificationEmail').addEventListener('input',e=>{$('#emailTestBtn').disabled=!e.target.value.trim()});
  $('#memberSearch').addEventListener('input',()=>{clearTimeout(state.memberTimer);state.memberTimer=setTimeout(loadMembers,220)});
  $$('.dialog-close,.dialog-cancel').forEach(b=>b.addEventListener('click',()=>b.closest('dialog').close()));document.addEventListener('click',e=>{if(!e.target.closest('.column-menu-wrap'))closePopovers()});document.addEventListener('keydown',e=>{if(e.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){e.preventDefault();$('#searchInput').focus()}if(e.key==='Escape')closePopovers()});
 }
@@ -231,15 +232,26 @@ function openProfile(){
  $('#profileDigestFrequency').value=state.user.digest_frequency||'off';
  $('#profileDigestDueDays').value=String(state.user.digest_due_days||3);
  $('#profileCurrentPassword').value=$('#profileNewPassword').value=$('#profileNewPassword2').value='';
- $('#profileSettingsError').hidden=true;$('#profilePasswordError').hidden=true;$('#profileDialog').showModal()
+ $('#profileSettingsError').hidden=true;$('#profilePasswordError').hidden=true;$('#emailTestStatus').hidden=true;$('#emailTestBtn').disabled=!(state.user.notification_email||'').trim();$('#profileDialog').showModal()
+}
+async function persistProfileFromForm(){
+ const d=await api('profile:update',{body:{display_name:$('#profileDisplayName').value.trim(),notification_email:$('#profileNotificationEmail').value.trim(),digest_frequency:$('#profileDigestFrequency').value,digest_due_days:Number($('#profileDigestDueDays').value)}});
+ state.user=d.user;$('#userChip').textContent=userDisplayName(state.user);$('#userChip').title='@'+state.user.username;$('#profileTitle').textContent=userDisplayName(state.user);$('#emailTestBtn').disabled=!(state.user.notification_email||'').trim();
+ return d.user;
 }
 async function saveProfile(e){
- e.preventDefault();const err=$('#profileSettingsError');err.hidden=true;
+ e.preventDefault();const err=$('#profileSettingsError');err.hidden=true;$('#emailTestStatus').hidden=true;
+ try{await persistProfileFromForm();await loadWorkspace();toast('Profilo aggiornato.')}catch(x){err.textContent=x.message;err.hidden=false}
+}
+async function sendTestEmail(){
+ const err=$('#profileSettingsError'),status=$('#emailTestStatus'),btn=$('#emailTestBtn');err.hidden=true;status.hidden=true;
  try{
-  const d=await api('profile:update',{body:{display_name:$('#profileDisplayName').value.trim(),notification_email:$('#profileNotificationEmail').value.trim(),digest_frequency:$('#profileDigestFrequency').value,digest_due_days:Number($('#profileDigestDueDays').value)}});
-  state.user=d.user;$('#userChip').textContent=userDisplayName(state.user);$('#userChip').title='@'+state.user.username;$('#profileTitle').textContent=userDisplayName(state.user);
-  await loadWorkspace();toast('Profilo aggiornato.');
- }catch(x){err.textContent=x.message;err.hidden=false}
+  btn.disabled=true;btn.classList.add('loading');
+  await persistProfileFromForm();
+  const d=await api('email:test',{body:{}});
+  status.textContent='Email di test inviata a '+d.recipient+'. Controlla anche la cartella spam.';status.hidden=false;
+  toast('Email di test inviata.');
+ }catch(x){err.textContent=x.message;err.hidden=false}finally{btn.classList.remove('loading');btn.disabled=!(state.user?.notification_email||'').trim()}
 }
 async function changeOwnPassword(e){
  e.preventDefault();const err=$('#profilePasswordError');err.hidden=true;
