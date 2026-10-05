@@ -25,6 +25,9 @@ const requiredBindings = [
   ["#cardForm submit", "$('#cardForm').addEventListener('submit',saveCard)"],
   ["profile submit", "$('#profileForm').addEventListener('submit',saveProfile)"],
   ["email test click", "$('#emailTestBtn').addEventListener('click',sendTestEmail)"],
+  ["calendar dialog", "$('#calendarBtn').addEventListener('click',openCalendarDialog)"],
+  ["personal calendar generate", "$('#generatePersonalCalendarBtn').addEventListener('click'"],
+  ["workspace calendar generate", "$('#generateWorkspaceCalendarBtn').addEventListener('click'"],
   ["profile password submit", "$('#profilePasswordForm').addEventListener('submit',changeOwnPassword)"],
   ["quick filters", "$$('.quick-filter').forEach"],
   ["add card click", "$$('.add-card-btn',boardEl).forEach"],
@@ -58,6 +61,11 @@ const requiredCardFlow = [
   "function cardMatchesQuickFilter(card)",
   "function userDisplayName(u)",
   "async function sendTestEmail()",
+  "async function openCalendarDialog()",
+  "async function generateCalendarFeed(scope,rotate=false)",
+  "async function revokeCalendarFeed(scope)",
+  "function copyCalendarUrl(scope)",
+  "function openCalendarUrl(scope)",
   "api('email:test'",
   "preventOnFilter:false",
   "function updateDueQuickState()",
@@ -74,7 +82,9 @@ const requiredButtons = [
   'newWorkspaceBtn','adminBtn','logoutBtn','manageTagsBtn','completedViewToggle',
   'dueDatePickerBtn','clearDueDateBtn','cardDueDate',
   'profileDisplayName','profileNotificationEmail','profileDigestFrequency','profileDigestDueDays','profilePasswordForm',
-  'emailTestBtn','emailTestStatus'
+  'emailTestBtn','emailTestStatus','calendarBtn','calendarDialog',
+  'generatePersonalCalendarBtn','copyPersonalCalendarBtn','openPersonalCalendarBtn','rotatePersonalCalendarBtn','revokePersonalCalendarBtn',
+  'generateWorkspaceCalendarBtn','copyWorkspaceCalendarBtn','openWorkspaceCalendarBtn','rotateWorkspaceCalendarBtn','revokeWorkspaceCalendarBtn'
 ];
 for (const id of requiredButtons) {
   if (!htmlIds.has(id)) fail('Missing critical control #' + id);
@@ -84,7 +94,7 @@ const requiredApiActions = [
   'workspace:create','workspace:update','column:create','column:update','column:delete',
   'column:reorder','tag:create','tag:update','tag:delete','card:create','card:update',
   'card:archive','card:complete','card:move','attachment:upload','attachment:download',
-  'attachment:delete','profile:update','email:test','password:change','site:update','members:list','member:set',
+  'attachment:delete','profile:update','email:test','calendar:feeds','calendar:token','calendar:revoke','password:change','site:update','members:list','member:set',
   'admin:users','admin:user-status','admin:user-admin','admin:user-password'
 ];
 for (const action of requiredApiActions) {
