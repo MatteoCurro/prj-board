@@ -24,7 +24,8 @@ if (forbiddenCollectionUse.length) {
 const requiredBindings = [
   ["#cardForm submit", "$('#cardForm').addEventListener('submit',saveCard)"],
   ["add card click", "$$('.add-card-btn',boardEl).forEach"],
-  ["complete card click", "$$('.card-complete',boardEl).forEach"],
+  ["complete card click", "$('.card-complete',boardEl).forEach"],
+  ["edit card click", "$('.card-edit',boardEl).forEach"],
   ["completed view toggle", "$('#completedViewToggle').addEventListener('change'"],
   ["column form submit", "$('#columnForm').addEventListener('submit',saveColumn)"],
   ["workspace form submit", "$('#workspaceForm').addEventListener('submit',saveWorkspace)"],
