@@ -26,6 +26,8 @@ const requiredBindings = [
   ["profile submit", "$('#profileForm').addEventListener('submit',saveProfile)"],
   ["email test click", "$('#emailTestBtn').addEventListener('click',sendTestEmail)"],
   ["calendar dialog", "$('#calendarBtn').addEventListener('click',openCalendarDialog)"],
+  ["my tasks dialog", "$('#myTasksBtn').addEventListener('click',openMyTasks)"],
+  ["checklist add", "$('#addChecklistItemBtn').addEventListener('click',addChecklistItem)"],
   ["personal calendar generate", "$('#generatePersonalCalendarBtn').addEventListener('click'"],
   ["workspace calendar generate", "$('#generateWorkspaceCalendarBtn').addEventListener('click'"],
   ["profile password submit", "$('#profilePasswordForm').addEventListener('submit',changeOwnPassword)"],
@@ -66,6 +68,13 @@ const requiredCardFlow = [
   "async function revokeCalendarFeed(scope)",
   "function copyCalendarUrl(scope)",
   "function openCalendarUrl(scope)",
+  "async function openMyTasks()",
+  "async function loadMyTasks(silent=false)",
+  "function renderMyTasks()",
+  "function addChecklistItem()",
+  "function renderChecklistDraft()",
+  "priority:$('#cardPriority').value",
+  "checklist:(state.cardChecklistDraft||[])",
   "api('email:test'",
   "preventOnFilter:false",
   "function updateDueQuickState()",
@@ -84,7 +93,8 @@ const requiredButtons = [
   'profileDisplayName','profileNotificationEmail','profileDigestFrequency','profileDigestDueDays','profilePasswordForm',
   'emailTestBtn','emailTestStatus','calendarBtn','calendarDialog',
   'generatePersonalCalendarBtn','copyPersonalCalendarBtn','openPersonalCalendarBtn','rotatePersonalCalendarBtn','revokePersonalCalendarBtn',
-  'generateWorkspaceCalendarBtn','copyWorkspaceCalendarBtn','openWorkspaceCalendarBtn','rotateWorkspaceCalendarBtn','revokeWorkspaceCalendarBtn'
+  'generateWorkspaceCalendarBtn','copyWorkspaceCalendarBtn','openWorkspaceCalendarBtn','rotateWorkspaceCalendarBtn','revokeWorkspaceCalendarBtn',
+  'myTasksBtn','myTasksDialog','myTasksList','refreshMyTasksBtn','cardPriority','checklistList','checklistNewItem','addChecklistItemBtn','checklistProgressLabel'
 ];
 for (const id of requiredButtons) {
   if (!htmlIds.has(id)) fail('Missing critical control #' + id);
@@ -94,7 +104,7 @@ const requiredApiActions = [
   'workspace:create','workspace:update','column:create','column:update','column:delete',
   'column:reorder','tag:create','tag:update','tag:delete','card:create','card:update',
   'card:archive','card:complete','card:move','attachment:upload','attachment:download',
-  'attachment:delete','profile:update','email:test','calendar:feeds','calendar:token','calendar:revoke','password:change','site:update','members:list','member:set',
+  'attachment:delete','profile:update','email:test','calendar:feeds','calendar:token','calendar:revoke','my:tasks','password:change','site:update','members:list','member:set',
   'admin:users','admin:user-status','admin:user-admin','admin:user-password'
 ];
 for (const action of requiredApiActions) {
