@@ -1,107 +1,85 @@
 # PRJ Board
 
-Mini project board self-hosted, pensata come alternativa essenziale a Trello/Kan e ottimizzata per il deploy su Gandi.
+Mini project board self-hosted, ispirata a Trello/Kan e ottimizzata per Gandi.
 
-## V1
+## Versione 0.2
 
-- board singola rinominabile
-- colonne creabili, rinominabili, eliminabili e riordinabili
+- più workspace, ciascuno con nome e logo opzionale
+- fallback automatico all'iniziale quando il logo non è presente
+- registrazione utenti con username/password
+- primo admin creato inserendo anche `APP_PASSWORD` durante la registrazione
+- registrazioni successive in stato **pending** fino all'approvazione dell'admin
+- verifica antispam leggera: honeypot + challenge numerica + controllo tempo
+- admin globale con pannello richieste utenti
+- possibilità di nominare altri admin globali
+- membri per workspace con ruoli:
+  - `viewer`: sola lettura
+  - `editor`: gestisce colonne e card
+  - `admin`: gestisce workspace, contenuti e membri
+- ricerca utenti attivi e associazione ai workspace
+- colonne con colore personalizzato
+- card riordinabili nella stessa colonna e tra colonne via SortableJS
 - card con titolo, descrizione, etichetta e scadenza
-- drag & drop tra colonne con SortableJS
-- ricerca client-side
 - archivio card
+- ricerca client-side
 - persistenza MySQL
-- login monoutente con sessione PHP
-- responsive desktop/mobile
-- tema scuro
-- font Unlock Venice: **Bricolage Grotesque** + **Inter**
-- accento principale Unlock Venice: `#B6174B`
+- sessioni PHP
+- UI responsive dark mode
+- font **Bricolage Grotesque** + **Inter**
+- accento principale `#B6174B`
 - deploy automatico GitHub Actions → Gandi SFTP
 
-## Stack
+## Bootstrap primo admin
 
-La V1 evita framework e build step intenzionalmente:
+Quando non esiste ancora nessun amministratore:
 
-- HTML/CSS/JavaScript
-- SortableJS via CDN per drag & drop
-- Lucide via CDN per le icone
-- PHP 8 + PDO
-- MySQL / MariaDB
+1. apri `https://prj.curromatteo.it/`
+2. scegli **Registrati**
+3. inserisci username e password personali
+4. nel campo **Password amministratore iniziale** inserisci il valore configurato nel secret `APP_PASSWORD`
+5. l'account viene creato immediatamente come admin globale
 
-Questo mantiene il progetto piccolo, facile da correggere e adatto a hosting condiviso.
+Dopo la creazione del primo admin, `APP_PASSWORD` non è una password di login utente: serve solo al bootstrap iniziale.
+
+Gli utenti successivi possono registrarsi normalmente e compariranno nel pannello **Utenti e accessi** come richieste da approvare.
 
 ## Produzione
 
-URL:
+- URL: `https://prj.curromatteo.it/`
+- document root: `/lamp0/web/vhosts/prj.curromatteo.it/htdocs`
+- database: `prj_cur`
+- config privata: `/lamp0/web/vhosts/prj.curromatteo.it/private/config.php`
 
-`https://prj.curromatteo.it/`
+## Secrets GitHub
 
-Document root:
+- `GANDI_SFTP_HOST`
+- `GANDI_SFTP_USER`
+- `GANDI_SFTP_PRIVATE_KEY`
+- `DB_HOST`
+- `DB_USER`
+- `DB_PASSWORD`
+- `APP_PASSWORD`
 
-`/lamp0/web/vhosts/prj.curromatteo.it/htdocs`
+## Database e migrazioni
 
-Database:
+L'API crea e aggiorna automaticamente lo schema. Non serve importare SQL a mano.
 
-`prj_cur`
+La migrazione 0.1 → 0.2 è additiva: workspace, colonne e card esistenti vengono preservati.
 
-La configurazione runtime viene generata dalla GitHub Action e caricata fuori dalla document root:
+Tabelle principali:
 
-`/lamp0/web/vhosts/prj.curromatteo.it/private/config.php`
+- `boards` — workspace
+- `board_columns`
+- `cards`
+- `users`
+- `workspace_members`
 
-Le credenziali non sono quindi presenti nella repository pubblica.
+## Stack
 
-## Secrets GitHub richiesti
+- HTML/CSS/JavaScript
+- SortableJS
+- Lucide
+- PHP 8 + PDO
+- MySQL / MariaDB
 
-In **Settings → Secrets and variables → Actions → Repository secrets**:
-
-| Secret | Valore |
-| --- | --- |
-| `GANDI_SFTP_HOST` | stesso host già usato per gli altri deploy Gandi |
-| `GANDI_SFTP_USER` | utente SFTP Gandi |
-| `GANDI_SFTP_PRIVATE_KEY` | chiave privata deploy |
-| `DB_HOST` | host MySQL fornito da Gandi |
-| `DB_USER` | utente del DB `prj_cur` |
-| `DB_PASSWORD` | password del DB |
-| `APP_PASSWORD` | password scelta per accedere a PRJ |
-
-Il nome database `prj_cur` e il path di produzione sono già fissati nel workflow.
-
-Se i secrets non sono ancora presenti, il workflow termina correttamente senza fare deploy. Appena sono configurati, basta rieseguire **Deploy PRJ Board** oppure fare un nuovo push su `main`.
-
-## Database
-
-Non è necessario importare manualmente `database/schema.sql`.
-
-Al primo accesso autenticato l'API:
-
-1. crea le tabelle mancanti;
-2. crea la board **Progetti**;
-3. crea le colonne iniziali **Da fare**, **In corso**, **In attesa**, **Fatto**.
-
-`database/schema.sql` resta nella repository solo come riferimento.
-
-## Struttura
-
-```text
-/
-├── index.html
-├── assets/
-│   └── app.css
-├── js/
-│   └── app.js
-├── api/
-│   └── index.php
-├── database/
-│   └── schema.sql
-└── .github/workflows/
-    └── deploy.yml
-```
-
-## Principio di sviluppo
-
-**Reuse first**: prima librerie piccole e consolidate, poi codice custom solo dove porta valore. La V1 evita intenzionalmente account multipli, realtime WebSocket, allegati, notifiche e automazioni: sono estensioni successive e non sono necessarie al core della board.
-
-
-## Stato deploy
-
-La pipeline di produzione è configurata per `prj.curromatteo.it` e parte automaticamente a ogni push su `main`.
+**Reuse first**: librerie piccole e consolidate dove utili, codice custom soltanto per dominio applicativo e permessi.
