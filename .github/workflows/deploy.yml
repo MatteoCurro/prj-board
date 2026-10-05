@@ -1,0 +1,172 @@
+name: Deploy PRJ Board
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prj-board-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Validate and deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://prj.curromatteo.it/
+    env:
+      GANDI_SFTP_HOST: ${{ secrets.GANDI_SFTP_HOST }}
+      GANDI_SFTP_USER: ${{ secrets.GANDI_SFTP_USER }}
+      GANDI_SFTP_PRIVATE_KEY: ${{ secrets.GANDI_SFTP_PRIVATE_KEY }}
+      DB_HOST: ${{ secrets.DB_HOST }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+      DB_NAME: prj_cur
+      REMOTE_ROOT: /lamp0/web/vhosts/prj.curromatteo.it
+      REMOTE_PATH: /lamp0/web/vhosts/prj.curromatteo.it/htdocs
+      EXPECTED_ED25519_MD5: MD5:5a:f5:68:71:4b:86:b4:96:61:1c:5f:d9:b1:21:4f:31
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check deployment secrets
+        id: config
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in GANDI_SFTP_HOST GANDI_SFTP_USER GANDI_SFTP_PRIVATE_KEY DB_HOST DB_USER DB_PASSWORD APP_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::notice::Missing secret $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -eq 0 ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Deployment skipped until all required secrets are configured."
+          fi
+
+      - name: Validate source
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          php -l api/index.php
+          node --check js/app.js
+          test -f index.html
+          test -f assets/app.css
+          grep -Fq 'Bricolage Grotesque' index.html
+          grep -Fq 'Sortable.min.js' index.html
+
+      - name: Build deployment payload
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist/assets dist/js dist/api
+          cp index.html .htaccess dist/
+          cp assets/app.css dist/assets/
+          cp js/app.js dist/js/
+          cp api/index.php dist/api/
+          find dist -type f -print
+
+      - name: Build private runtime config
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          def php_string(value: str) -> str:
+              return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+          config = """<?php
+          return [
+              'db_host' => %s,
+              'db_port' => 3306,
+              'db_name' => %s,
+              'db_user' => %s,
+              'db_pass' => %s,
+              'app_password' => %s,
+          ];
+          """ % tuple(php_string(os.environ[key]) for key in [
+              "DB_HOST", "DB_NAME", "DB_USER", "DB_PASSWORD", "APP_PASSWORD"
+          ])
+
+          Path("/tmp/prj-config.php").write_text(config, encoding="utf-8")
+          PY
+          php -l /tmp/prj-config.php
+
+      - name: Configure deploy key and verify Gandi host
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$GANDI_SFTP_PRIVATE_KEY" > "$HOME/.ssh/gandi_deploy"
+          chmod 600 "$HOME/.ssh/gandi_deploy"
+
+          ssh-keygen -y -P '' -f "$HOME/.ssh/gandi_deploy" > /tmp/gandi_deploy.pub
+          ssh-keyscan -p 22 -t ed25519 "$GANDI_SFTP_HOST" > /tmp/gandi_known_host 2>/dev/null
+          test -s /tmp/gandi_known_host
+
+          ACTUAL_FP="$(ssh-keygen -lf /tmp/gandi_known_host -E md5 | awk '{print $2}')"
+          echo "Gandi host fingerprint: $ACTUAL_FP"
+          test "$ACTUAL_FP" = "$EXPECTED_ED25519_MD5" || {
+            echo "Gandi host fingerprint mismatch; refusing deployment"
+            exit 1
+          }
+
+          cat /tmp/gandi_known_host > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Build SFTP batch
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          {
+            printf 'cd "%s"\n' "$REMOTE_PATH"
+            printf '%s\n' '-mkdir "assets"' '-mkdir "js"' '-mkdir "api"'
+
+            find dist/assets dist/js dist/api -type f -print0 | sort -z | while IFS= read -r -d '' file; do
+              rel="${file#dist/}"
+              printf 'put "%s" "%s"\n' "$file" "$rel"
+            done
+
+            printf 'put "%s" "%s"\n' "dist/.htaccess" ".htaccess"
+
+            printf '%s\n' "-mkdir \"$REMOTE_ROOT/private\""
+            printf 'put "%s" "%s"\n' "/tmp/prj-config.php" "$REMOTE_ROOT/private/config.php"
+            printf 'chmod 600 "%s"\n' "$REMOTE_ROOT/private/config.php"
+
+            # Index last: assets/API are already in place when the new UI becomes visible.
+            printf '%s\n' 'put "dist/index.html" "index.html"' 'bye'
+          } > /tmp/deploy.sftp
+
+          echo "Files to upload: $(grep -c '^put ' /tmp/deploy.sftp)"
+
+      - name: Deploy over native SFTP
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          sftp             -b /tmp/deploy.sftp             -i "$HOME/.ssh/gandi_deploy"             -o BatchMode=yes             -o IdentitiesOnly=yes             -o StrictHostKeyChecking=yes             -o UserKnownHostsFile="$HOME/.ssh/known_hosts"             -o ConnectTimeout=20             "$GANDI_SFTP_USER@$GANDI_SFTP_HOST"
+
+      - name: Verify production
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 4 --retry-delay 2 -H 'Cache-Control: no-cache'             "https://prj.curromatteo.it/?deploy=${GITHUB_SHA}" -o /tmp/prj-live.html
+          grep -Fq '<title>PRJ · Project Board</title>' /tmp/prj-live.html
+
+          curl -fsSL --retry 4 --retry-delay 2 -H 'Cache-Control: no-cache'             "https://prj.curromatteo.it/api/?action=status&deploy=${GITHUB_SHA}" -o /tmp/prj-status.json
+          node -e "const x=require('/tmp/prj-status.json'); if(!x.ok || x.setup_required) process.exit(1)"
+          echo "PRJ Board deployed: https://prj.curromatteo.it/"
