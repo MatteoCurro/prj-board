@@ -28,6 +28,8 @@ const requiredBindings = [
   ["calendar dialog", "$('#calendarBtn').addEventListener('click',openCalendarDialog)"],
   ["my tasks dialog", "$('#myTasksBtn').addEventListener('click',openMyTasks)"],
   ["checklist add", "$('#addChecklistItemBtn').addEventListener('click',addChecklistItem)"],
+  ["my tasks dialog", "$('#myTasksBtn').addEventListener('click',openMyTasks)"],
+  ["checklist add", "$('#addChecklistItemBtn').addEventListener('click',addChecklistItem)"],
   ["personal calendar generate", "$('#generatePersonalCalendarBtn').addEventListener('click'"],
   ["workspace calendar generate", "$('#generateWorkspaceCalendarBtn').addEventListener('click'"],
   ["profile password submit", "$('#profilePasswordForm').addEventListener('submit',changeOwnPassword)"],
@@ -75,6 +77,13 @@ const requiredCardFlow = [
   "function renderChecklistDraft()",
   "priority:$('#cardPriority').value",
   "checklist:(state.cardChecklistDraft||[])",
+  "async function openMyTasks()",
+  "async function loadMyTasks(silent=false)",
+  "function renderMyTasks()",
+  "function addChecklistItem()",
+  "function renderChecklistDraft()",
+  "priority:$('#cardPriority').value",
+  "checklist:(state.cardChecklistDraft||[])",
   "api('email:test'",
   "preventOnFilter:false",
   "function updateDueQuickState()",
@@ -94,6 +103,7 @@ const requiredButtons = [
   'emailTestBtn','emailTestStatus','calendarBtn','calendarDialog',
   'generatePersonalCalendarBtn','copyPersonalCalendarBtn','openPersonalCalendarBtn','rotatePersonalCalendarBtn','revokePersonalCalendarBtn',
   'generateWorkspaceCalendarBtn','copyWorkspaceCalendarBtn','openWorkspaceCalendarBtn','rotateWorkspaceCalendarBtn','revokeWorkspaceCalendarBtn',
+  'myTasksBtn','myTasksDialog','myTasksList','refreshMyTasksBtn','cardPriority','checklistList','checklistNewItem','addChecklistItemBtn','checklistProgressLabel',
   'myTasksBtn','myTasksDialog','myTasksList','refreshMyTasksBtn','cardPriority','checklistList','checklistNewItem','addChecklistItemBtn','checklistProgressLabel'
 ];
 for (const id of requiredButtons) {
