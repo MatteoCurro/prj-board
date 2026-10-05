@@ -1,7 +1,7 @@
 (() => {
 'use strict';
 const API='api/index.php';
-const state={user:null,workspaces:[],workspace:null,site:null,search:'',quickFilter:'all',completedView:false,cardSortables:[],columnSortable:null,status:null,memberTimer:null};
+const state={user:null,workspaces:[],workspace:null,site:null,search:'',quickFilter:'all',completedView:false,cardSortables:[],columnSortable:null,status:null,memberTimer:null,calendarFeeds:null};
 const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const boardEl=$('#board'), emptyState=$('#emptyState'), toastRegion=$('#toastRegion');
 
@@ -85,7 +85,7 @@ function renderWorkspace(){
  $('#completedViewToggle').checked=state.completedView;
  $$('.quick-filter').forEach(b=>b.classList.toggle('active',b.dataset.quickFilter===state.quickFilter));
  emptyState.hidden=ws.columns.length>0;boardEl.hidden=ws.columns.length===0;
- $('#addColumnBtn').hidden=!canEdit()||state.completedView;$('#emptyAddColumnBtn').hidden=!canEdit();$('#editWorkspaceBtn').hidden=!canAdminWorkspace();$('#adminBtn').hidden=!(state.user?.is_admin||canAdminWorkspace());
+ $('#addColumnBtn').hidden=!canEdit()||state.completedView;$('#emptyAddColumnBtn').hidden=!canEdit();$('#editWorkspaceBtn').hidden=!canAdminWorkspace();$('#adminBtn').hidden=!(state.user?.is_admin||canAdminWorkspace());$('#calendarBtn').hidden=false;
  ws.columns.forEach(col=>{
   const f=$('#columnTemplate').content.cloneNode(true),el=$('.column',f),mix=tagMix(col.tags),visibleCards=col.cards.filter(card=>Boolean(card.completed)===state.completedView&&cardMatchesQuickFilter(card));
   el.dataset.columnId=col.id;el.style.setProperty('--tag-bg',mix.column);el.style.setProperty('--tag-solid',mix.solid);
@@ -140,7 +140,7 @@ function renderCard(card,columnTags=[]){
 
 function bindGlobalEvents(){
  $('#workspaceSelect').addEventListener('change',e=>selectWorkspace(Number(e.target.value)));$('#newWorkspaceBtn').addEventListener('click',()=>openWorkspaceDialog());$('#editWorkspaceBtn').addEventListener('click',()=>openWorkspaceDialog(state.workspace));$('#refreshBtn').addEventListener('click',()=>loadWorkspace());$('#addColumnBtn').addEventListener('click',()=>openColumnDialog());$('#emptyAddColumnBtn').addEventListener('click',()=>openColumnDialog());
- $('#adminBtn').addEventListener('click',openAdmin);$('#userChip').addEventListener('click',openProfile);$('#logoutBtn').addEventListener('click',async()=>{try{await api('logout',{body:{}})}catch{}location.reload()});
+ $('#adminBtn').addEventListener('click',openAdmin);$('#calendarBtn').addEventListener('click',openCalendarDialog);$('#userChip').addEventListener('click',openProfile);$('#logoutBtn').addEventListener('click',async()=>{try{await api('logout',{body:{}})}catch{}location.reload()});
  $('#searchInput').addEventListener('input',e=>{state.search=e.target.value.trim().toLowerCase();applySearch()});$('#completedViewToggle').addEventListener('change',e=>{state.completedView=e.target.checked;renderWorkspace()});
  $$('.quick-filter').forEach(b=>b.addEventListener('click',()=>{state.quickFilter=b.dataset.quickFilter||'all';renderWorkspace()}));
  $('#showLoginBtn').addEventListener('click',()=>toggleAuth('login'));$('#showRegisterBtn').addEventListener('click',()=>toggleAuth('register'));$('#showRecoverBtn').addEventListener('click',()=>toggleAuth('recover'));$('#backToLoginBtn').addEventListener('click',()=>toggleAuth('login'));
@@ -150,6 +150,8 @@ function bindGlobalEvents(){
  $('#dueDatePickerBtn').addEventListener('click',openDueDatePicker);$('#clearDueDateBtn').addEventListener('click',()=>setDueDate(''));$('#cardDueDate').addEventListener('change',updateDueQuickState);$$('.due-quick-list [data-due-offset]').forEach(b=>b.addEventListener('click',()=>setDueDate(localDateValue(b.dataset.dueOffset))));
  $('#profileForm').addEventListener('submit',saveProfile);$('#emailTestBtn').addEventListener('click',sendTestEmail);$('#profilePasswordForm').addEventListener('submit',changeOwnPassword);$('#resetPasswordForm').addEventListener('submit',resetUserPassword);$('#siteSettingsForm').addEventListener('submit',saveSiteSettings);
  $('#profileNotificationEmail').addEventListener('input',e=>{$('#emailTestBtn').disabled=!e.target.value.trim()});
+ $('#generatePersonalCalendarBtn').addEventListener('click',()=>generateCalendarFeed('personal'));$('#rotatePersonalCalendarBtn').addEventListener('click',()=>generateCalendarFeed('personal',true));$('#revokePersonalCalendarBtn').addEventListener('click',()=>revokeCalendarFeed('personal'));$('#copyPersonalCalendarBtn').addEventListener('click',()=>copyCalendarUrl('personal'));$('#openPersonalCalendarBtn').addEventListener('click',()=>openCalendarUrl('personal'));
+ $('#generateWorkspaceCalendarBtn').addEventListener('click',()=>generateCalendarFeed('workspace'));$('#rotateWorkspaceCalendarBtn').addEventListener('click',()=>generateCalendarFeed('workspace',true));$('#revokeWorkspaceCalendarBtn').addEventListener('click',()=>revokeCalendarFeed('workspace'));$('#copyWorkspaceCalendarBtn').addEventListener('click',()=>copyCalendarUrl('workspace'));$('#openWorkspaceCalendarBtn').addEventListener('click',()=>openCalendarUrl('workspace'));
  $('#memberSearch').addEventListener('input',()=>{clearTimeout(state.memberTimer);state.memberTimer=setTimeout(loadMembers,220)});
  $$('.dialog-close,.dialog-cancel').forEach(b=>b.addEventListener('click',()=>b.closest('dialog').close()));document.addEventListener('click',e=>{if(!e.target.closest('.column-menu-wrap'))closePopovers()});document.addEventListener('keydown',e=>{if(e.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){e.preventDefault();$('#searchInput').focus()}if(e.key==='Escape')closePopovers()});
 }
@@ -194,6 +196,56 @@ function applySearch(){
 
 function findColumn(id){return state.workspace?.columns.find(c=>Number(c.id)===Number(id))}
 function findCard(id){for(const col of state.workspace?.columns||[]){const c=col.cards.find(x=>Number(x.id)===Number(id));if(c)return c}return null}
+
+async function openCalendarDialog(){
+ if(!state.workspace)return;
+ $('#calendarDialogTitle').textContent=state.workspace.name+' · Calendario';
+ state.calendarFeeds=null;
+ $('#calendarDialog').showModal();
+ renderCalendarFeeds({personal:null,workspace:null,can_manage_workspace_feed:false},true);
+ icons();
+ try{
+  const d=await api('calendar:feeds',{query:{workspace_id:state.workspace.id}});
+  state.calendarFeeds=d;renderCalendarFeeds(d,false);icons();
+ }catch(e){toast(e.message,'error')}
+}
+function renderCalendarFeeds(data,loading=false){
+ const personal=data?.personal||null,workspace=data?.workspace||null,canWorkspace=!!data?.can_manage_workspace_feed;
+ $('#personalCalendarEmpty').hidden=!!personal||loading;$('#personalCalendarActive').hidden=!personal;
+ $('#personalCalendarUrl').value=personal?.url||'';
+ $('#workspaceCalendarSection').hidden=!canWorkspace;
+ $('#workspaceCalendarEmpty').hidden=!!workspace||loading;$('#workspaceCalendarActive').hidden=!workspace;
+ $('#workspaceCalendarUrl').value=workspace?.url||'';
+ const pg=$('#generatePersonalCalendarBtn'),wg=$('#generateWorkspaceCalendarBtn');if(pg)pg.disabled=loading;if(wg)wg.disabled=loading;
+}
+async function generateCalendarFeed(scope,rotate=false){
+ if(!state.workspace)return;
+ if(rotate&&!confirm('Rigenerare l’URL? Il vecchio calendario smetterà di aggiornarsi.'))return;
+ try{
+  const d=await api('calendar:token',{body:{workspace_id:state.workspace.id,scope}});
+  const feeds=await api('calendar:feeds',{query:{workspace_id:state.workspace.id}});
+  state.calendarFeeds=feeds;renderCalendarFeeds(feeds,false);icons();
+  toast(rotate?'URL calendario rigenerato.':'Calendario generato.');
+  return d;
+ }catch(e){toast(e.message,'error')}
+}
+async function revokeCalendarFeed(scope){
+ if(!state.workspace||!confirm('Revocare questo calendario? Chi usa il vecchio URL non riceverà più aggiornamenti.'))return;
+ try{
+  await api('calendar:revoke',{body:{workspace_id:state.workspace.id,scope}});
+  const feeds=await api('calendar:feeds',{query:{workspace_id:state.workspace.id}});
+  state.calendarFeeds=feeds;renderCalendarFeeds(feeds,false);icons();toast('Calendario revocato.');
+ }catch(e){toast(e.message,'error')}
+}
+function currentCalendarUrl(scope){return scope==='workspace'?state.calendarFeeds?.workspace?.url:state.calendarFeeds?.personal?.url}
+async function copyCalendarUrl(scope){
+ const url=currentCalendarUrl(scope);if(!url)return;
+ try{await navigator.clipboard.writeText(url);toast('URL calendario copiato.')}catch{const input=scope==='workspace'?$('#workspaceCalendarUrl'):$('#personalCalendarUrl');input.select();document.execCommand('copy');toast('URL calendario copiato.')}
+}
+function openCalendarUrl(scope){
+ const url=currentCalendarUrl(scope);if(!url)return;
+ location.href=url.replace(/^https?:\/\//i,'webcal://');
+}
 
 function openWorkspaceDialog(ws=null){$('#workspaceId').value=ws?.id||'';$('#workspaceName').value=ws?.name||'';$('#workspaceLogo').value=ws?.logo_url||'';$('#workspaceDialogTitle').textContent=ws?'Modifica workspace':'Nuovo workspace';$('#workspaceDialog').showModal();setTimeout(()=>$('#workspaceName').focus(),30)}
 async function saveWorkspace(e){e.preventDefault();const id=$('#workspaceId').value,body={name:$('#workspaceName').value.trim(),logo_url:$('#workspaceLogo').value.trim()};if(id)body.workspace_id=id;try{const d=await api(id?'workspace:update':'workspace:create',{body});$('#workspaceDialog').close();const st=await api('status');state.workspaces=st.workspaces||[];renderWorkspaceSelect();await selectWorkspace(id?Number(id):Number(d.id))}catch(x){toast(x.message,'error')}}
