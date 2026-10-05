@@ -24,9 +24,9 @@ if (forbiddenCollectionUse.length) {
 const requiredBindings = [
   ["#cardForm submit", "$('#cardForm').addEventListener('submit',saveCard)"],
   ["add card click", "$$('.add-card-btn',boardEl).forEach"],
-  ["complete card click", "$('.card-complete',boardEl).forEach"],
-  ["edit card click", "$('.card-edit',boardEl).forEach"],
-  ["card quick-action pointer guard", "$('.task-quick-actions button',boardEl).forEach"],
+  ["complete card click", "$(\'.card-complete\',boardEl).forEach"],
+  ["edit card click", "$(\'.card-edit\',boardEl).forEach"],
+  ["card quick-action pointer guard", "$(\'.task-quick-actions button\',boardEl).forEach"],
   ["due-date calendar", "$('#dueDatePickerBtn').addEventListener('click',openDueDatePicker)"],
   ["due-date quick presets", "$('.due-quick-list [data-due-offset]').forEach"],
   ["completed view toggle", "$('#completedViewToggle').addEventListener('change'"],
@@ -54,6 +54,8 @@ const requiredCardFlow = [
   "preventOnFilter:false",
   "function updateDueQuickState()",
   "function openDueDatePicker()",
+  "const oldIcon=$('svg,i',completeBtn)",
+  "oldIcon.replaceWith(newIcon)",
 ];
 for (const token of requiredCardFlow) {
   if (!js.includes(token)) fail('Card flow contract missing: ' + token);
