@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#11120f">
   <title>PRJ · Project Board</title>
-  <meta name="description" content="Una project board essenziale, veloce e privata.">
+  <meta name="description" content="Workspace condivisi, essenziali e veloci.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/app.css?v=0.1.0">
+  <link rel="stylesheet" href="assets/app.css?v=0.2.0">
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -18,155 +18,193 @@
         <div class="brand-mark" aria-hidden="true">P</div>
         <div>
           <a class="brand" href="/" aria-label="PRJ home">PRJ</a>
-          <span class="brand-sub">project board</span>
+          <span class="brand-sub">project workspace</span>
         </div>
       </div>
+
+      <div id="workspaceSwitch" class="workspace-switch" hidden>
+        <span id="workspaceMiniAvatar" class="workspace-mini-avatar">P</span>
+        <select id="workspaceSelect" aria-label="Workspace"></select>
+        <button id="newWorkspaceBtn" class="ghost-icon" type="button" title="Nuovo workspace" aria-label="Nuovo workspace" hidden><i data-lucide="plus"></i></button>
+      </div>
+
       <div class="top-actions">
         <label class="search-wrap" aria-label="Cerca nelle card">
           <i data-lucide="search" aria-hidden="true"></i>
           <input id="searchInput" type="search" placeholder="Cerca…" autocomplete="off">
           <kbd>/</kbd>
         </label>
+        <button id="adminBtn" class="icon-btn" type="button" title="Utenti e accessi" aria-label="Utenti e accessi" hidden><i data-lucide="users"></i><span id="pendingBadge" class="mini-badge" hidden></span></button>
+        <span id="userChip" class="user-chip" hidden></span>
         <button id="logoutBtn" class="icon-btn" type="button" title="Esci" aria-label="Esci" hidden><i data-lucide="log-out"></i></button>
       </div>
     </header>
 
     <main class="workspace">
-      <section class="board-head">
-        <div>
-          <p class="eyebrow">Workspace</p>
-          <div class="board-title-row">
-            <h1 id="boardTitle">Progetti</h1>
-            <button id="renameBoardBtn" class="ghost-icon" type="button" aria-label="Rinomina board"><i data-lucide="pencil"></i></button>
-          </div>
-          <p id="boardMeta" class="muted">Caricamento board…</p>
-        </div>
-        <div class="board-actions">
-          <button id="addColumnBtn" class="button secondary" type="button"><i data-lucide="columns-3"></i> Nuova colonna</button>
-          <button id="refreshBtn" class="icon-btn" type="button" aria-label="Aggiorna board" title="Aggiorna"><i data-lucide="refresh-cw"></i></button>
-        </div>
+      <section id="workspaceNoAccess" class="empty-state" hidden>
+        <div class="empty-icon"><i data-lucide="lock-keyhole"></i></div>
+        <h2>Nessun workspace assegnato</h2>
+        <p>Il tuo account è attivo, ma un amministratore deve ancora associarti a un workspace.</p>
       </section>
 
-      <section id="board" class="board" aria-label="Project board"></section>
+      <div id="workspaceContent">
+        <section class="board-head">
+          <div class="workspace-heading">
+            <div id="workspaceAvatar" class="workspace-avatar">P</div>
+            <div>
+              <p class="eyebrow">Workspace</p>
+              <div class="board-title-row">
+                <h1 id="boardTitle">Progetti</h1>
+                <button id="editWorkspaceBtn" class="ghost-icon" type="button" aria-label="Modifica workspace" hidden><i data-lucide="pencil"></i></button>
+              </div>
+              <p id="boardMeta" class="muted">Caricamento…</p>
+            </div>
+          </div>
+          <div class="board-actions">
+            <button id="addColumnBtn" class="button secondary" type="button"><i data-lucide="columns-3"></i> Nuova colonna</button>
+            <button id="refreshBtn" class="icon-btn" type="button" aria-label="Aggiorna workspace" title="Aggiorna"><i data-lucide="refresh-cw"></i></button>
+          </div>
+        </section>
 
-      <div id="emptyState" class="empty-state" hidden>
-        <div class="empty-icon"><i data-lucide="layout-dashboard"></i></div>
-        <h2>La board è vuota</h2>
-        <p>Crea la prima colonna e inizia a organizzare il lavoro.</p>
-        <button id="emptyAddColumnBtn" class="button primary" type="button">Crea una colonna</button>
+        <section id="board" class="board" aria-label="Project board"></section>
+
+        <div id="emptyState" class="empty-state" hidden>
+          <div class="empty-icon"><i data-lucide="layout-dashboard"></i></div>
+          <h2>Il workspace è vuoto</h2>
+          <p>Crea la prima colonna e inizia a organizzare il lavoro.</p>
+          <button id="emptyAddColumnBtn" class="button primary" type="button">Crea una colonna</button>
+        </div>
       </div>
     </main>
   </div>
 
   <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="true"></div>
 
-  <dialog id="loginDialog" class="modal login-modal">
-    <form id="loginForm" method="dialog" class="modal-card">
-      <div class="modal-brand">
-        <div class="brand-mark large" aria-hidden="true">P</div>
-        <div>
-          <h2>PRJ</h2>
-          <p>Accedi alla project board.</p>
-        </div>
-      </div>
-      <label class="field">
-        <span>Password</span>
-        <input id="loginPassword" type="password" autocomplete="current-password" required autofocus>
-      </label>
-      <p id="loginError" class="form-error" hidden></p>
-      <button class="button primary wide" type="submit">Accedi <i data-lucide="arrow-right"></i></button>
-    </form>
-  </dialog>
-
-  <dialog id="setupDialog" class="modal login-modal">
+  <dialog id="authDialog" class="modal auth-modal">
     <div class="modal-card">
       <div class="modal-brand">
         <div class="brand-mark large" aria-hidden="true">P</div>
         <div>
-          <h2>Configurazione richiesta</h2>
-          <p>Mancano le credenziali server. Configura i GitHub Secrets indicati nel README e riesegui il deploy.</p>
+          <h2>PRJ</h2>
+          <p>Workspace privati e condivisi.</p>
         </div>
       </div>
+
+      <div class="auth-tabs">
+        <button id="showLoginBtn" class="auth-tab active" type="button">Accedi</button>
+        <button id="showRegisterBtn" class="auth-tab" type="button">Registrati</button>
+      </div>
+
+      <form id="loginForm">
+        <label class="field"><span>Username</span><input id="loginUsername" autocomplete="username" maxlength="32" required autofocus></label>
+        <label class="field"><span>Password</span><input id="loginPassword" type="password" autocomplete="current-password" required></label>
+        <p id="loginError" class="form-error" hidden></p>
+        <button class="button primary wide auth-submit" type="submit">Accedi <i data-lucide="arrow-right"></i></button>
+      </form>
+
+      <form id="registerForm" hidden>
+        <label class="field"><span>Username</span><input id="registerUsername" autocomplete="username" maxlength="32" pattern="[A-Za-z0-9._-]{3,32}" required></label>
+        <div class="form-grid">
+          <label class="field"><span>Password</span><input id="registerPassword" type="password" autocomplete="new-password" minlength="8" required></label>
+          <label class="field"><span>Ripeti password</span><input id="registerPassword2" type="password" autocomplete="new-password" minlength="8" required></label>
+        </div>
+        <label id="bootstrapField" class="field">
+          <span>Password amministratore iniziale</span>
+          <input id="bootstrapPassword" type="password" autocomplete="off">
+          <small>Solo per creare il primo account admin: usa la password segreta configurata per PRJ.</small>
+        </label>
+        <label class="field"><span id="challengeLabel">Verifica antispam</span><input id="challengeAnswer" inputmode="numeric" autocomplete="off" required></label>
+        <label class="hp-field" aria-hidden="true">Website<input id="websiteField" tabindex="-1" autocomplete="off"></label>
+        <p id="registerError" class="form-error" hidden></p>
+        <p id="registerSuccess" class="form-success" hidden></p>
+        <button class="button primary wide auth-submit" type="submit">Crea account <i data-lucide="user-plus"></i></button>
+      </form>
     </div>
   </dialog>
 
-  <dialog id="columnDialog" class="modal">
-    <form id="columnForm" method="dialog" class="modal-card compact">
+  <dialog id="setupDialog" class="modal login-modal">
+    <div class="modal-card"><div class="modal-brand"><div class="brand-mark large">P</div><div><h2>Configurazione richiesta</h2><p>Mancano le credenziali server.</p></div></div></div>
+  </dialog>
+
+  <dialog id="workspaceDialog" class="modal">
+    <form id="workspaceForm" class="modal-card compact">
       <div class="modal-head">
-        <div><p class="eyebrow">Board</p><h2 id="columnDialogTitle">Nuova colonna</h2></div>
+        <div><p class="eyebrow">Workspace</p><h2 id="workspaceDialogTitle">Nuovo workspace</h2></div>
         <button class="ghost-icon dialog-close" type="button" aria-label="Chiudi"><i data-lucide="x"></i></button>
       </div>
-      <label class="field"><span>Nome</span><input id="columnName" maxlength="80" required autocomplete="off"></label>
-      <input id="columnId" type="hidden">
-      <div class="modal-actions">
-        <button class="button ghost dialog-cancel" type="button">Annulla</button>
-        <button class="button primary" type="submit">Salva</button>
-      </div>
+      <input id="workspaceId" type="hidden">
+      <label class="field"><span>Nome</span><input id="workspaceName" maxlength="100" required autocomplete="off"></label>
+      <label class="field"><span>Logo <em>opzionale</em></span><input id="workspaceLogo" type="url" maxlength="500" placeholder="https://…"><small>Se assente mostriamo l’iniziale del workspace.</small></label>
+      <div class="modal-actions"><button class="button ghost dialog-cancel" type="button">Annulla</button><button class="button primary" type="submit">Salva</button></div>
     </form>
   </dialog>
 
-  <dialog id="boardDialog" class="modal">
-    <form id="boardForm" method="dialog" class="modal-card compact">
+  <dialog id="columnDialog" class="modal">
+    <form id="columnForm" class="modal-card compact">
       <div class="modal-head">
-        <div><p class="eyebrow">Workspace</p><h2>Rinomina board</h2></div>
+        <div><p class="eyebrow">Colonna</p><h2 id="columnDialogTitle">Nuova colonna</h2></div>
         <button class="ghost-icon dialog-close" type="button" aria-label="Chiudi"><i data-lucide="x"></i></button>
       </div>
-      <label class="field"><span>Nome board</span><input id="boardName" maxlength="100" required autocomplete="off"></label>
-      <div class="modal-actions">
-        <button class="button ghost dialog-cancel" type="button">Annulla</button>
-        <button class="button primary" type="submit">Salva</button>
-      </div>
+      <input id="columnId" type="hidden">
+      <label class="field"><span>Nome</span><input id="columnName" maxlength="80" required autocomplete="off"></label>
+      <label class="field color-field"><span>Colore</span><input id="columnColor" type="color" value="#5b6255"></label>
+      <div class="modal-actions"><button class="button ghost dialog-cancel" type="button">Annulla</button><button class="button primary" type="submit">Salva</button></div>
     </form>
   </dialog>
 
   <dialog id="cardDialog" class="modal card-modal">
-    <form id="cardForm" method="dialog" class="modal-card">
+    <form id="cardForm" class="modal-card">
       <div class="modal-head">
         <div><p class="eyebrow" id="cardColumnLabel">Card</p><h2 id="cardDialogTitle">Nuova attività</h2></div>
         <button class="ghost-icon dialog-close" type="button" aria-label="Chiudi"><i data-lucide="x"></i></button>
       </div>
-      <input id="cardId" type="hidden">
-      <input id="cardColumnId" type="hidden">
+      <input id="cardId" type="hidden"><input id="cardColumnId" type="hidden">
       <label class="field"><span>Titolo</span><input id="cardTitle" maxlength="180" required autocomplete="off"></label>
       <label class="field"><span>Descrizione</span><textarea id="cardDescription" rows="6" maxlength="10000" placeholder="Note, link, dettagli…"></textarea></label>
       <div class="form-grid">
-        <label class="field"><span>Etichetta</span>
-          <select id="cardLabel">
-            <option value="">Nessuna</option>
-            <option value="magenta">Magenta</option>
-            <option value="amber">Ambra</option>
-            <option value="teal">Verde acqua</option>
-            <option value="blue">Blu</option>
-            <option value="violet">Viola</option>
-          </select>
-        </label>
+        <label class="field"><span>Etichetta</span><select id="cardLabel"><option value="">Nessuna</option><option value="magenta">Magenta</option><option value="amber">Ambra</option><option value="teal">Verde acqua</option><option value="blue">Blu</option><option value="violet">Viola</option></select></label>
         <label class="field"><span>Scadenza</span><input id="cardDueDate" type="date"></label>
       </div>
       <div class="modal-actions split">
         <button id="archiveCardBtn" class="button danger-text" type="button" hidden><i data-lucide="archive"></i> Archivia</button>
-        <div>
-          <button class="button ghost dialog-cancel" type="button">Annulla</button>
-          <button class="button primary" type="submit">Salva</button>
-        </div>
+        <div><button class="button ghost dialog-cancel" type="button">Annulla</button><button id="saveCardBtn" class="button primary" type="submit">Salva</button></div>
       </div>
     </form>
   </dialog>
 
+  <dialog id="adminDialog" class="modal admin-modal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div><p class="eyebrow">Controllo accessi</p><h2>Utenti e workspace</h2></div>
+        <button class="ghost-icon dialog-close" type="button" aria-label="Chiudi"><i data-lucide="x"></i></button>
+      </div>
+
+      <section id="pendingSection" class="admin-section" hidden>
+        <div class="section-head"><div><h3>Richieste di registrazione</h3><p>Approva o rifiuta i nuovi account.</p></div></div>
+        <div id="pendingUsers" class="user-list"></div>
+      </section>
+
+      <section id="membersSection" class="admin-section">
+        <div class="section-head">
+          <div><h3>Membri del workspace</h3><p id="membersWorkspaceLabel">Assegna utenti e ruoli.</p></div>
+          <label class="small-search"><i data-lucide="search"></i><input id="memberSearch" type="search" placeholder="Cerca username…"></label>
+        </div>
+        <div id="workspaceMembers" class="user-list"></div>
+      </section>
+
+      <section id="globalUsersSection" class="admin-section" hidden>
+        <div class="section-head"><div><h3>Utenti attivi</h3><p>Puoi nominare altri amministratori globali.</p></div></div>
+        <div id="globalUsers" class="user-list"></div>
+      </section>
+    </div>
+  </dialog>
+
   <template id="columnTemplate">
     <article class="column" data-column-id="">
+      <div class="column-color-bar"></div>
       <header class="column-head">
-        <div class="column-title-wrap">
-          <span class="column-grip" aria-hidden="true"><i data-lucide="grip-vertical"></i></span>
-          <h2 class="column-title"></h2>
-          <span class="column-count"></span>
-        </div>
-        <div class="column-menu-wrap">
-          <button class="ghost-icon column-menu-btn" type="button" aria-label="Azioni colonna"><i data-lucide="ellipsis"></i></button>
-          <div class="popover column-popover" hidden>
-            <button type="button" data-action="rename-column"><i data-lucide="pencil"></i> Rinomina</button>
-            <button type="button" data-action="delete-column" class="danger-text"><i data-lucide="trash-2"></i> Elimina</button>
-          </div>
-        </div>
+        <div class="column-title-wrap"><span class="column-grip"><i data-lucide="grip-vertical"></i></span><h2 class="column-title"></h2><span class="column-count"></span></div>
+        <div class="column-menu-wrap"><button class="ghost-icon column-menu-btn" type="button" aria-label="Azioni colonna"><i data-lucide="ellipsis"></i></button><div class="popover column-popover" hidden><button type="button" data-action="rename-column"><i data-lucide="pencil"></i> Modifica</button><button type="button" data-action="delete-column" class="danger-text"><i data-lucide="trash-2"></i> Elimina</button></div></div>
       </header>
       <div class="card-list"></div>
       <button class="add-card-btn" type="button"><i data-lucide="plus"></i> Aggiungi card</button>
@@ -176,22 +214,12 @@
   <template id="cardTemplate">
     <article class="task-card" tabindex="0" data-card-id="">
       <div class="task-accent"></div>
-      <div class="task-card-body">
-        <div class="task-topline">
-          <span class="task-label" hidden></span>
-          <button class="card-edit ghost-icon" type="button" aria-label="Modifica card"><i data-lucide="pencil"></i></button>
-        </div>
-        <h3 class="task-title"></h3>
-        <p class="task-description" hidden></p>
-        <footer class="task-meta">
-          <span class="task-due" hidden><i data-lucide="calendar-days"></i><span></span></span>
-        </footer>
-      </div>
+      <div class="task-card-body"><div class="task-topline"><span class="task-label" hidden></span><button class="card-edit ghost-icon" type="button" aria-label="Modifica card"><i data-lucide="pencil"></i></button></div><h3 class="task-title"></h3><p class="task-description" hidden></p><footer class="task-meta"><span class="task-due" hidden><i data-lucide="calendar-days"></i><span></span></span></footer></div>
     </article>
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-  <script src="js/app.js?v=0.1.0" defer></script>
+  <script src="js/app.js?v=0.2.0" defer></script>
 </body>
 </html>
