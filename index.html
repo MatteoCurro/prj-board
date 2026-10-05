@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/app.css?v=1.2.0">
+  <link rel="stylesheet" href="assets/app.css?v=1.3.0">
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -68,6 +68,7 @@
               <span class="completion-slider" aria-hidden="true"></span>
               <span class="completion-label done-label">Completate</span>
             </label>
+            <button id="calendarBtn" class="button secondary compact-action" type="button"><i data-lucide="calendar-sync"></i> Calendario</button>
             <button id="addColumnBtn" class="button secondary" type="button"><i data-lucide="columns-3"></i> Nuova colonna</button>
             <button id="refreshBtn" class="icon-btn" type="button" aria-label="Aggiorna workspace" title="Aggiorna"><i data-lucide="refresh-cw"></i></button>
           </div>
@@ -152,6 +153,64 @@
 
   <dialog id="setupDialog" class="modal login-modal">
     <div class="modal-card"><div class="modal-brand"><div class="brand-mark large">P</div><div><h2>Configurazione richiesta</h2><p>Mancano le credenziali server.</p></div></div></div>
+  </dialog>
+
+  <dialog id="calendarDialog" class="modal">
+    <div class="modal-card calendar-modal-card">
+      <div class="modal-head">
+        <div><p class="eyebrow">Calendario</p><h2 id="calendarDialogTitle">Scadenze workspace</h2></div>
+        <button class="ghost-icon dialog-close" type="button" aria-label="Chiudi"><i data-lucide="x"></i></button>
+      </div>
+
+      <p class="helper-copy calendar-intro">Sottoscrivi un calendario separato: PRJ non modifica gli eventi già presenti nel tuo account. Le card completate o senza scadenza spariscono dal feed al successivo aggiornamento del calendario.</p>
+
+      <section class="calendar-feed-card">
+        <div class="calendar-feed-head">
+          <div><strong>Le mie scadenze</strong><small>Solo le card assegnate a te in questo workspace.</small></div>
+          <span class="calendar-feed-badge">Personale</span>
+        </div>
+        <div id="personalCalendarEmpty" class="calendar-empty-state">
+          <p>Nessun feed personale attivo.</p>
+          <button id="generatePersonalCalendarBtn" class="button primary" type="button"><i data-lucide="plus"></i> Genera calendario</button>
+        </div>
+        <div id="personalCalendarActive" class="calendar-feed-active" hidden>
+          <label class="field"><span>URL calendario</span><input id="personalCalendarUrl" readonly></label>
+          <div class="calendar-feed-actions">
+            <button id="copyPersonalCalendarBtn" class="button secondary" type="button"><i data-lucide="copy"></i> Copia URL</button>
+            <button id="openPersonalCalendarBtn" class="button secondary" type="button"><i data-lucide="external-link"></i> Apri calendario</button>
+            <button id="rotatePersonalCalendarBtn" class="tiny-btn" type="button">Rigenera</button>
+            <button id="revokePersonalCalendarBtn" class="tiny-btn danger" type="button">Revoca</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="workspaceCalendarSection" class="calendar-feed-card" hidden>
+        <div class="calendar-feed-head">
+          <div><strong>Tutte le scadenze del workspace</strong><small>Comprende tutte le card attive con una data di scadenza.</small></div>
+          <span class="calendar-feed-badge admin">Workspace</span>
+        </div>
+        <div id="workspaceCalendarEmpty" class="calendar-empty-state">
+          <p>Nessun feed workspace attivo.</p>
+          <button id="generateWorkspaceCalendarBtn" class="button primary" type="button"><i data-lucide="plus"></i> Genera calendario</button>
+        </div>
+        <div id="workspaceCalendarActive" class="calendar-feed-active" hidden>
+          <label class="field"><span>URL calendario</span><input id="workspaceCalendarUrl" readonly></label>
+          <div class="calendar-feed-actions">
+            <button id="copyWorkspaceCalendarBtn" class="button secondary" type="button"><i data-lucide="copy"></i> Copia URL</button>
+            <button id="openWorkspaceCalendarBtn" class="button secondary" type="button"><i data-lucide="external-link"></i> Apri calendario</button>
+            <button id="rotateWorkspaceCalendarBtn" class="tiny-btn" type="button">Rigenera</button>
+            <button id="revokeWorkspaceCalendarBtn" class="tiny-btn danger" type="button">Revoca</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="calendar-help">
+        <strong>Google Calendar</strong>
+        <span>Da desktop: Altri calendari → + → Da URL → incolla l’URL HTTPS. Google decide autonomamente la frequenza di aggiornamento del feed.</span>
+      </div>
+
+      <div class="modal-actions"><button class="button ghost dialog-cancel" type="button">Chiudi</button></div>
+    </div>
   </dialog>
 
   <dialog id="workspaceDialog" class="modal">
@@ -375,6 +434,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-  <script src="js/app.js?v=1.2.0" defer></script>
+  <script src="js/app.js?v=1.3.0" defer></script>
 </body>
 </html>
