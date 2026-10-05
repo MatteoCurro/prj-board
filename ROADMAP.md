@@ -33,7 +33,7 @@ Architettura consigliata:
 - endpoint/admin action "Invia email di test".
 
 SMTP:
-- prima scelta: SMTP locale Gandi `localhost:25`, senza autenticazione, per basso volume;
+- percorso attuale verificato: PHP `mail()` → `/usr/sbin/sendmail -t -i` → sSMTP → relay `*.gpaas.net`, per basso volume;
 - mittente reale sul dominio (es. `prj@curromatteo.it` o `noreply@curromatteo.it`);
 - SPF del dominio deve includere `_spf.gpaas.net` se si invia dal Web Hosting;
 - se la deliverability non è soddisfacente, seconda scelta: Gandi Mail autenticato su `mail.gandi.net:465`;
@@ -47,6 +47,9 @@ Consolidamento 05/10/2026:
 - supporto pronto per Gandi Mail autenticato `mail.gandi.net:465` tramite secret `SMTP_USER` + `SMTP_PASSWORD`;
 - il digest automatico resta silenzioso se non esistono card assegnate, non archiviate, non completate e con scadenza pertinente;
 - il deploy segnala quale SPF manca in base al trasporto effettivamente configurato.
+- test diagnostico 05/10/2026: il relay Gandi ha accettato il messaggio (`250 2.0.0 queued`) e il recapito è arrivato, inizialmente in spam; confermato quindi il funzionamento end-to-end del Web Hosting;
+- SPF aggiornato per autorizzare insieme Gandi Mail e Web Hosting; il template definitivo usa multipart testo+HTML, envelope sender coerente, Date/Message-ID e struttura visuale PRJ;
+- il deploy controlla inoltre presenza DNS di DMARC e selector DKIM Gandi, senza bloccare il rilascio.
 
 ## 4. Calendario workspace / Google Calendar
 
