@@ -50,6 +50,7 @@ Consolidamento 05/10/2026:
 - test diagnostico 05/10/2026: il relay Gandi ha accettato il messaggio (`250 2.0.0 queued`) e il recapito è arrivato, inizialmente in spam; confermato quindi il funzionamento end-to-end del Web Hosting;
 - SPF aggiornato per autorizzare insieme Gandi Mail e Web Hosting; il template definitivo usa multipart testo+HTML, envelope sender coerente, Date/Message-ID e struttura visuale PRJ;
 - il deploy controlla inoltre presenza DNS di DMARC e selector DKIM Gandi, senza bloccare il rilascio.
+- integrazione Resend predisposta: se è presente il secret `RESEND_API_KEY`, PRJ usa `smtp.resend.com:465`, username `resend`, mittente `prj@curromatteo.it`; in assenza del secret resta attivo il trasporto Gandi Web Hosting.
 
 ## 4. Calendario workspace / Google Calendar
 

@@ -393,7 +393,7 @@ async function sendTestEmail(){
   btn.disabled=true;btn.classList.add('loading');
   await persistProfileFromForm();
   const d=await api('email:test',{body:{}});
-  const via=d.transport==='php-mail'?'Gandi Web Hosting':(d.transport==='smtp'?'SMTP Gandi':d.transport||'trasporto email');
+  const via=d.provider==='resend'?'Resend SMTP':(d.transport==='php-mail'?'Gandi Web Hosting':(d.transport==='smtp'?'SMTP autenticato':d.transport||'trasporto email'));
   status.textContent='Notifica accettata da '+via+' per '+d.recipient+'. Il server di destinazione può impiegare qualche istante a recapitarla.';
   status.hidden=false;
   toast('Notifica inviata.');
