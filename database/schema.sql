@@ -1,0 +1,37 @@
+-- PRJ Board · schema reference
+-- The application auto-creates these tables on first authenticated request.
+
+CREATE TABLE boards (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  position INT NOT NULL DEFAULT 1000,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE board_columns (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  board_id INT UNSIGNED NOT NULL,
+  name VARCHAR(80) NOT NULL,
+  position INT NOT NULL DEFAULT 1000,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_columns_board_position (board_id, position),
+  CONSTRAINT fk_columns_board FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE cards (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  column_id INT UNSIGNED NOT NULL,
+  title VARCHAR(180) NOT NULL,
+  description TEXT NULL,
+  label VARCHAR(24) NOT NULL DEFAULT '',
+  due_date DATE NULL,
+  position INT NOT NULL DEFAULT 1000,
+  archived TINYINT(1) NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_cards_column_position (column_id, archived, position),
+  KEY idx_cards_updated (updated_at),
+  CONSTRAINT fk_cards_column FOREIGN KEY (column_id) REFERENCES board_columns(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
