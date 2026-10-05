@@ -393,14 +393,18 @@ async function sendTestEmail(){
   btn.disabled=true;btn.classList.add('loading');
   await persistProfileFromForm();
   const d=await api('email:test',{body:{}});
-  const diag=d.diagnostic||{},steps=(diag.transcript||[]).map(x=>x.step+' '+(x.code||'?')).join(' → ');
-  if(d.accepted){
-   const final=d.response?' Risposta finale: '+d.response+'.':'';
-   status.textContent='Relay locale Gandi '+(diag.relay||'localhost:25')+' ha accettato il messaggio per '+d.recipient+'. '+steps+'.'+final+' Il recapito finale al destinatario resta separato dalla presa in carico del relay.';
-   toast('Messaggio accettato dal relay locale Gandi.');
+  const diag=d.diagnostic||{},runtime=diag.runtime||{},sendmail=diag.sendmail||null,steps=(diag.transcript||[]).map(x=>x.step+' '+(x.code||'?')).join(' → ');
+  const runtimeInfo=' sendmail_path='+(runtime.sendmail_path||'(vuoto)')+'; SMTP='+((runtime.smtp_ini||'(vuoto)'))+':'+((runtime.smtp_port_ini||'(vuoto)'))+'; mail.log='+(runtime.mail_log||'(vuoto)')+'.';
+  if(sendmail&&sendmail.attempted){
+   const out=(sendmail.stderr||sendmail.stdout||'nessun output').replace(/\s+/g,' ').trim();
+   status.textContent='localhost:25: '+(diag.error||'non disponibile')+'. Wrapper PHP/sendmail eseguito: exit '+sendmail.exit_code+'. '+out+'.'+runtimeInfo;
+   toast(sendmail.ok?'Wrapper sendmail eseguito.':'Wrapper sendmail ha restituito errore.',sendmail.ok?'info':'error');
+  }else if(d.accepted){
+   status.textContent='localhost:25: '+(diag.error||'non disponibile')+'. PHP mail() ha comunque accettato il messaggio.'+runtimeInfo;
+   toast('PHP mail() ha accettato il messaggio.');
   }else{
-   status.textContent='Relay locale Gandi ha rifiutato il messaggio in fase '+(diag.stage||'sconosciuta')+'. '+steps+'. '+(diag.error||'Nessun dettaglio ulteriore.');
-   toast('Il relay locale ha rifiutato il messaggio.','error');
+   status.textContent='Invio diagnostico non accettato. localhost:25: '+(diag.error||'errore sconosciuto')+'. '+steps+'.'+runtimeInfo;
+   toast('Diagnostica email fallita.','error');
   }
   status.hidden=false;
  }catch(x){err.textContent=x.message;err.hidden=false}finally{btn.classList.remove('loading');btn.disabled=!(state.user?.notification_email||'').trim()}

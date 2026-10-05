@@ -1330,15 +1330,36 @@ try {
                 . '<p style="font-size:12px;line-height:1.5;color:#747a70;margin:18px 0 0">La diagnostica registra le risposte SMTP del relay Gandi fino alla presa in carico del messaggio.</p>';
             $subject = '[' . ($site['name'] ?? 'PRJ') . '] Notifica account';
 
+            $textBody = "Ciao $display,\n\nQuesto messaggio verifica il percorso di consegna del relay locale di PRJ.\n";
             $mail = prj_smtp_local_diagnostic_send(
                 $config,
                 $recipient,
                 $subject,
                 prj_mail_html_document($subject, $body),
-                "Ciao $display,\n\nQuesto messaggio verifica il percorso di consegna del relay locale di PRJ.\n"
+                $textBody
             );
 
+            $runtime = prj_mail_runtime_diagnostic();
+            $sendmail = null;
+            $phpMail = null;
             $accepted = !empty($mail['accepted']);
+
+            if (!$accepted) {
+                $sendmail = prj_sendmail_verbose_diagnostic($config, $recipient, $subject, $textBody);
+                if (!empty($sendmail['attempted'])) {
+                    $accepted = !empty($sendmail['ok']);
+                } else {
+                    try {
+                        $phpMail = prj_php_mail_send($config, $recipient, $subject, prj_mail_html_document($subject, $body));
+                        $accepted = !empty($phpMail['accepted']);
+                    } catch (Throwable $fallbackError) {
+                        $phpMail = [
+                            'accepted' => false,
+                            'error' => $fallbackError->getMessage(),
+                        ];
+                    }
+                }
+            }
             prj_digest_record(
                 $pdo,
                 (int)$user['id'],
@@ -1354,13 +1375,16 @@ try {
                 'accepted' => $accepted,
                 'delivery_confirmed' => false,
                 'recipient' => $recipient,
-                'transport' => $mail['transport'] ?? 'smtp-local-diagnostic',
-                'response' => $mail['response'] ?? null,
+                'transport' => !empty($sendmail['attempted']) ? 'sendmail-path-diagnostic' : ($phpMail['transport'] ?? ($mail['transport'] ?? 'smtp-local-diagnostic')),
+                'response' => $sendmail['stderr'] ?? $sendmail['stdout'] ?? $phpMail['response'] ?? $mail['response'] ?? null,
                 'diagnostic' => [
                     'relay' => $mail['relay'] ?? 'localhost:25',
                     'stage' => $mail['stage'] ?? null,
                     'error' => $mail['error'] ?? null,
                     'transcript' => $mail['transcript'] ?? [],
+                    'runtime' => $runtime,
+                    'sendmail' => $sendmail,
+                    'php_mail' => $phpMail,
                 ],
             ]);
         }
