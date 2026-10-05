@@ -100,3 +100,8 @@ Al primo accesso autenticato l'API:
 ## Principio di sviluppo
 
 **Reuse first**: prima librerie piccole e consolidate, poi codice custom solo dove porta valore. La V1 evita intenzionalmente account multipli, realtime WebSocket, allegati, notifiche e automazioni: sono estensioni successive e non sono necessarie al core della board.
+
+
+## Stato deploy
+
+La pipeline di produzione è configurata per `prj.curromatteo.it` e parte automaticamente a ogni push su `main`.
