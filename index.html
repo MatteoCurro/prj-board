@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/app.css?v=0.4.0">
+  <link rel="stylesheet" href="assets/app.css?v=0.5.0">
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -61,6 +61,12 @@
             </div>
           </div>
           <div class="board-actions">
+            <label class="completion-switch" title="Mostra card completate">
+              <span class="completion-label active-label">Attive</span>
+              <input id="completedViewToggle" type="checkbox">
+              <span class="completion-slider" aria-hidden="true"></span>
+              <span class="completion-label done-label">Completate</span>
+            </label>
             <button id="addColumnBtn" class="button secondary" type="button"><i data-lucide="columns-3"></i> Nuova colonna</button>
             <button id="refreshBtn" class="icon-btn" type="button" aria-label="Aggiorna workspace" title="Aggiorna"><i data-lucide="refresh-cw"></i></button>
           </div>
@@ -220,7 +226,10 @@
       </section>
 
       <div class="modal-actions split">
-        <button id="archiveCardBtn" class="button danger-text" type="button" hidden><i data-lucide="archive"></i> Archivia</button>
+        <div class="card-state-actions">
+          <button id="completeCardBtn" class="button complete-button" type="button" hidden><i data-lucide="circle-check-big"></i> <span>Segna fatto</span></button>
+          <button id="archiveCardBtn" class="button danger-text" type="button" hidden><i data-lucide="archive"></i> Archivia</button>
+        </div>
         <div><button class="button ghost dialog-cancel" type="button">Annulla</button><button id="saveCardBtn" class="button primary" type="submit">Salva</button></div>
       </div>
     </form>
@@ -312,7 +321,7 @@
     <article class="task-card" tabindex="0" data-card-id="">
       <div class="task-accent"></div>
       <div class="task-card-body">
-        <div class="task-topline"><span class="task-label" hidden></span><button class="card-edit ghost-icon" type="button" aria-label="Modifica card"><i data-lucide="pencil"></i></button></div>
+        <div class="task-topline"><span class="task-label" hidden></span><div class="task-quick-actions"><button class="card-complete ghost-icon" type="button" aria-label="Segna come fatto" title="Segna come fatto"><i data-lucide="circle-check-big"></i></button><button class="card-edit ghost-icon" type="button" aria-label="Modifica card"><i data-lucide="pencil"></i></button></div></div>
         <h3 class="task-title"></h3>
         <p class="task-description" hidden></p>
         <div class="task-assignees" hidden></div>
@@ -326,6 +335,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-  <script src="js/app.js?v=0.4.0" defer></script>
+  <script src="js/app.js?v=0.5.0" defer></script>
 </body>
 </html>
