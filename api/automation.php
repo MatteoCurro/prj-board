@@ -52,6 +52,23 @@ try {
         PDO::ATTR_EMULATE_PREPARES => false,
     ]);
 
+    // L'endpoint può essere chiamato anche prima che un utente apra PRJ dopo un deploy:
+    // assicuriamo quindi qui le sole colonne necessarie all'integrazione.
+    $hasColumn = static function (PDO $pdo, string $column): bool {
+        $stmt = $pdo->prepare("
+            SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cards' AND COLUMN_NAME = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$column]);
+        return (bool)$stmt->fetchColumn();
+    };
+    if (!$hasColumn($pdo, 'due_time')) $pdo->exec("ALTER TABLE cards ADD COLUMN due_time TIME NULL AFTER due_date");
+    if (!$hasColumn($pdo, 'source')) $pdo->exec("ALTER TABLE cards ADD COLUMN source VARCHAR(24) NOT NULL DEFAULT 'manual' AFTER priority");
+    if (!$hasColumn($pdo, 'source_external_id')) $pdo->exec("ALTER TABLE cards ADD COLUMN source_external_id VARCHAR(191) NULL AFTER source");
+    if (!$hasColumn($pdo, 'source_url')) $pdo->exec("ALTER TABLE cards ADD COLUMN source_url VARCHAR(500) NULL AFTER source_external_id");
+    if (!$hasColumn($pdo, 'automation_confidence')) $pdo->exec("ALTER TABLE cards ADD COLUMN automation_confidence DECIMAL(5,4) NULL AFTER source_url");
+
     $action = (string)($_GET['action'] ?? 'context');
 
     if ($action === 'context') {
