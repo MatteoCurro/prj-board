@@ -1,9 +1,10 @@
--- PRJ Board · schema reference
--- The application auto-creates these tables on first authenticated request.
+-- PRJ Board 0.2 · reference schema
+-- Runtime migrations are performed automatically by api/index.php.
 
 CREATE TABLE boards (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
+  logo_url VARCHAR(500) NULL,
   position INT NOT NULL DEFAULT 1000,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -13,6 +14,7 @@ CREATE TABLE board_columns (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   board_id INT UNSIGNED NOT NULL,
   name VARCHAR(80) NOT NULL,
+  color VARCHAR(16) NOT NULL DEFAULT '#5b6255',
   position INT NOT NULL DEFAULT 1000,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -32,6 +34,31 @@ CREATE TABLE cards (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_cards_column_position (column_id, archived, position),
-  KEY idx_cards_updated (updated_at),
   CONSTRAINT fk_cards_column FOREIGN KEY (column_id) REFERENCES board_columns(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE users (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(32) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'pending',
+  is_admin TINYINT(1) NOT NULL DEFAULT 0,
+  approved_at DATETIME NULL,
+  approved_by INT UNSIGNED NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_users_username (username),
+  KEY idx_users_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE workspace_members (
+  workspace_id INT UNSIGNED NOT NULL,
+  user_id INT UNSIGNED NOT NULL,
+  role VARCHAR(16) NOT NULL DEFAULT 'viewer',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (workspace_id, user_id),
+  KEY idx_members_user (user_id),
+  CONSTRAINT fk_members_workspace FOREIGN KEY (workspace_id) REFERENCES boards(id) ON DELETE CASCADE,
+  CONSTRAINT fk_members_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
