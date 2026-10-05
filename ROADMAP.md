@@ -51,6 +51,7 @@ Consolidamento 05/10/2026:
 - SPF aggiornato per autorizzare insieme Gandi Mail e Web Hosting; il template definitivo usa multipart testo+HTML, envelope sender coerente, Date/Message-ID e struttura visuale PRJ;
 - il deploy controlla inoltre presenza DNS di DMARC e selector DKIM Gandi, senza bloccare il rilascio.
 - integrazione Resend predisposta: se è presente il secret `RESEND_API_KEY`, PRJ usa `smtp.resend.com:465`, username `resend`, mittente `prj@curromatteo.it`; in assenza del secret resta attivo il trasporto Gandi Web Hosting.
+- 05/10/2026: dominio Resend verificato e API key configurata nei GitHub Secrets; il prossimo deploy attiva Resend come trasporto SMTP principale.
 
 ## 4. Calendario workspace / Google Calendar
 
