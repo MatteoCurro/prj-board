@@ -21,7 +21,8 @@ Crea uno script standalone in Apps Script con l'account Gmail di lavoro, copia `
 |---|---|
 | `PRJ_BASE_URL` | `https://prj.curromatteo.it` |
 | `PRJ_AUTOMATION_KEY` | stessa chiave configurata nel secret GitHub `AUTOMATION_KEY` |
-| `PRJ_WORKSPACE_ID` | id del workspace di lavoro |
+| `PRJ_WORKSPACE_ID` | id del workspace di lavoro (opzionale se usi `PRJ_WORKSPACE_NAME`) |
+| `PRJ_WORKSPACE_NAME` | nome esatto del workspace (alternativa più comoda all’ID) |
 | `OPENAI_API_KEY` | API key OpenAI |
 | `PRJ_USERNAME` | username PRJ a cui assegnare le card (opzionale) |
 | `OPENAI_MODEL` | default `gpt-6-luna` |
