@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/app.css?v=1.1.0">
+  <link rel="stylesheet" href="assets/app.css?v=1.2.0">
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -269,7 +269,11 @@
           <label class="field"><span>Recap scadenze</span><select id="profileDigestFrequency"><option value="off">Disattivato</option><option value="daily">Giornaliero</option><option value="weekly">Settimanale</option></select></label>
           <label class="field"><span>Considera in scadenza entro</span><select id="profileDigestDueDays"><option value="1">1 giorno</option><option value="2">2 giorni</option><option value="3">3 giorni</option><option value="5">5 giorni</option><option value="7">7 giorni</option><option value="14">14 giorni</option></select></label>
         </div>
-        <p class="helper-copy">Le preferenze vengono salvate ora; l'invio automatico delle email verrà attivato nella v1.2 dopo il test SMTP.</p>
+        <div class="email-test-row">
+          <div><strong>Verifica email</strong><small>Invia un test all'indirizzo notifiche salvato.</small></div>
+          <button id="emailTestBtn" class="button secondary" type="button"><i data-lucide="send"></i> Invia test</button>
+        </div>
+        <p id="emailTestStatus" class="form-success" hidden></p>
         <p id="profileSettingsError" class="form-error" hidden></p>
         <div class="modal-actions"><button class="button ghost dialog-cancel" type="button">Chiudi</button><button class="button primary" type="submit">Salva profilo</button></div>
       </form>
@@ -371,6 +375,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-  <script src="js/app.js?v=1.1.0" defer></script>
+  <script src="js/app.js?v=1.2.0" defer></script>
 </body>
 </html>
