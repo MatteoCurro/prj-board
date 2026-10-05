@@ -21,7 +21,7 @@ function prj_calendar_rows(PDO $pdo, array $feed): array {
 
     if ($scope === 'personal') {
         $stmt = $pdo->prepare("
-            SELECT c.id, c.title, c.description, c.due_date, c.updated_at,
+            SELECT c.id, c.title, c.description, c.due_date, c.due_time, c.updated_at,
                    bc.name column_name, b.name workspace_name
             FROM cards c
             JOIN board_columns bc ON bc.id = c.column_id
@@ -32,14 +32,14 @@ function prj_calendar_rows(PDO $pdo, array $feed): array {
               AND c.archived = 0
               AND c.completed = 0
               AND c.due_date IS NOT NULL
-            ORDER BY c.due_date, bc.position, c.position, c.id
+            ORDER BY c.due_date, (c.due_time IS NULL), c.due_time, bc.position, c.position, c.id
         ");
         $stmt->execute([$workspaceId, (int)$feed['user_id']]);
         return $stmt->fetchAll();
     }
 
     $stmt = $pdo->prepare("
-        SELECT c.id, c.title, c.description, c.due_date, c.updated_at,
+        SELECT c.id, c.title, c.description, c.due_date, c.due_time, c.updated_at,
                bc.name column_name, b.name workspace_name
         FROM cards c
         JOIN board_columns bc ON bc.id = c.column_id
@@ -48,7 +48,7 @@ function prj_calendar_rows(PDO $pdo, array $feed): array {
           AND c.archived = 0
           AND c.completed = 0
           AND c.due_date IS NOT NULL
-        ORDER BY c.due_date, bc.position, c.position, c.id
+        ORDER BY c.due_date, (c.due_time IS NULL), c.due_time, bc.position, c.position, c.id
     ");
     $stmt->execute([$workspaceId]);
     return $stmt->fetchAll();
@@ -74,8 +74,15 @@ function prj_calendar_ics(array $config, array $feed, array $rows): string {
 
     $now = gmdate('Ymd\THis\Z');
     foreach ($rows as $row) {
-        $due = new DateTimeImmutable((string)$row['due_date'], new DateTimeZone('Europe/Rome'));
-        $end = $due->modify('+1 day');
+        $tz = new DateTimeZone('Europe/Rome');
+        $due = new DateTimeImmutable((string)$row['due_date'], $tz);
+        $dueTime = trim((string)($row['due_time'] ?? ''));
+        $isTimed = $dueTime !== '';
+        if ($isTimed) {
+            $start = new DateTimeImmutable($due->format('Y-m-d') . ' ' . substr($dueTime, 0, 8), $tz);
+        } else {
+            $end = $due->modify('+1 day');
+        }
         $description = trim((string)($row['description'] ?? ''));
         $meta = (string)$row['workspace_name'] . ' · ' . (string)$row['column_name'];
         if ($description !== '') $meta .= "\n\n" . mb_substr($description, 0, 1200);
@@ -87,8 +94,13 @@ function prj_calendar_ics(array $config, array $feed, array $rows): string {
         $lines[] = 'UID:prj-card-' . (int)$row['id'] . '@prj.curromatteo.it';
         $lines[] = 'DTSTAMP:' . $now;
         $lines[] = 'LAST-MODIFIED:' . $updated->setTimezone(new DateTimeZone('UTC'))->format('Ymd\THis\Z');
-        $lines[] = 'DTSTART;VALUE=DATE:' . $due->format('Ymd');
-        $lines[] = 'DTEND;VALUE=DATE:' . $end->format('Ymd');
+        if ($isTimed) {
+            $lines[] = 'DTSTART;TZID=Europe/Rome:' . $start->format('Ymd\THis');
+            $lines[] = 'DURATION:PT1H';
+        } else {
+            $lines[] = 'DTSTART;VALUE=DATE:' . $due->format('Ymd');
+            $lines[] = 'DTEND;VALUE=DATE:' . $end->format('Ymd');
+        }
         $lines[] = 'SUMMARY:' . prj_calendar_escape((string)$row['title']);
         $lines[] = 'DESCRIPTION:' . prj_calendar_escape($meta);
         $lines[] = 'STATUS:CONFIRMED';
