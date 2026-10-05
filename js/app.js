@@ -98,8 +98,8 @@ function tagMix(tags=[]){
 function renderWorkspace(){
  destroySortables();boardEl.innerHTML='';const ws=state.workspace;if(!ws)return;
  $('#boardTitle').textContent=ws.name;setWorkspaceAvatar($('#workspaceAvatar'),ws);setWorkspaceAvatar($('#workspaceMiniAvatar'),ws);
- const activeTotal=ws.columns.reduce((n,c)=>n+c.cards.filter(card=>!card.completed).length,0);
- const completedTotal=ws.columns.reduce((n,c)=>n+c.cards.filter(card=>card.completed).length,0);
+ const activeTotal=ws.columns.reduce((n,c)=>n+c.cards.filter(card=>!card.completed&&cardMatchesAutomation(card)).length,0);
+ const completedTotal=ws.columns.reduce((n,c)=>n+c.cards.filter(card=>card.completed&&cardMatchesAutomation(card)).length,0);
  $('#boardMeta').textContent=ws.columns.length+(ws.columns.length===1?' colonna':' colonne')+' · '+activeTotal+' attive · '+completedTotal+' completate · '+roleLabel(ws.role);
  $('#completedViewToggle').checked=state.completedView;$('#automationViewToggle').checked=state.showAutomations;
  $('.quick-filter').forEach(b=>b.classList.toggle('active',b.dataset.quickFilter===state.quickFilter));
@@ -363,7 +363,7 @@ function openCardDialog(card=null,columnId){
  $('#cardColumnLabel').textContent=col?.name||'Card';$('#cardDialogTitle').textContent=card?'Dettaglio attività':'Nuova attività';$('#archiveCardBtn').hidden=!card||!canEdit();$('#completeCardBtn').hidden=!card||!canEdit();
  if(card){const completeBtn=$('#completeCardBtn');$('span',completeBtn).textContent=card.completed?'Riapri':'Segna fatto';const oldIcon=$('svg,i',completeBtn);const newIcon=document.createElement('i');newIcon.setAttribute('data-lucide',card.completed?'rotate-ccw':'circle-check-big');if(oldIcon)oldIcon.replaceWith(newIcon);else completeBtn.prepend(newIcon)}
  $('#saveCardBtn').hidden=!canEdit();$('#attachmentUploadField').hidden=!canEdit();$('#cardFiles').value='';$('#selectedFiles').innerHTML='';renderAttachments(card?.attachments||[]);renderAssigneeChoices(card?.assignees||[]);
- $$('#cardForm input,#cardForm textarea,#cardForm select').forEach(i=>{if(!['cardId','cardColumnId','cardFiles','checklistNewItem'].includes(i.id))i.disabled=!canEdit()});
+ $('#cardForm input,#cardForm textarea,#cardForm select').forEach(i=>{if(!['cardId','cardColumnId','cardFiles','checklistNewItem'].includes(i.id))i.disabled=!canEdit()||(i.id==='cardDueTime'&&!$('#cardDueDate').value)});
  $('#cardDialog').showModal();icons();if(canEdit())setTimeout(()=>$('#cardTitle').focus(),30)
 }
 
