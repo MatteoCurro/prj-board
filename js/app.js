@@ -393,8 +393,9 @@ async function sendTestEmail(){
   btn.disabled=true;btn.classList.add('loading');
   await persistProfileFromForm();
   const d=await api('email:test',{body:{}});
-  status.textContent='Email di test inviata a '+d.recipient+'. Controlla anche la cartella spam.';status.hidden=false;
-  toast('Email di test inviata.');
+  const via=d.transport==='smtp'?'SMTP Gandi':(d.transport==='php-mail'?'trasporto PHP/Gandi':d.transport||'trasporto email');
+  status.textContent='Messaggio accettato da '+via+' per '+d.recipient+'. Il recapito finale non è confermabile dall’app: verifica la casella e lo spam.';status.hidden=false;
+  toast('Messaggio accettato dal trasporto email.');
  }catch(x){err.textContent=x.message;err.hidden=false}finally{btn.classList.remove('loading');btn.disabled=!(state.user?.notification_email||'').trim()}
 }
 async function changeOwnPassword(e){
