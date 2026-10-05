@@ -681,6 +681,7 @@ if ($action === 'health') {
         'mail_available' => function_exists('mail'),
         'smtp_available' => (bool)($smtp['ok'] ?? false),
         'smtp_ms' => $smtp['ms'] ?? null,
+        'smtp_error' => $smtp['error'] ?? null,
         'email_transport_available' => (bool)($transport['ok'] ?? false),
         'email_transport' => $transport['transport'] ?? 'none',
         'uploads_writable' => is_dir($uploadsRoot) && is_writable($uploadsRoot),
@@ -1325,7 +1326,7 @@ try {
             $safeDisplay = htmlspecialchars($display, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $body = '<div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#d62b64;font-weight:700">PRJ</div>'
                 . '<h1 style="font-size:22px;margin:8px 0 8px;color:#f1f3ee">Email di test</h1>'
-                . '<p style="font-size:13px;line-height:1.55;color:#a9afa4;margin:0">Ciao ' . $safeDisplay . ', l\'invio SMTP di PRJ funziona correttamente. Se leggi questo messaggio, il tuo indirizzo per i recap è configurato.</p>'
+                . '<p style="font-size:13px;line-height:1.55;color:#a9afa4;margin:0">Ciao ' . $safeDisplay . ', questo è un test del trasporto email di PRJ. Se leggi questo messaggio, il recapito verso il tuo indirizzo funziona.</p>'
                 . '<p style="font-size:12px;line-height:1.5;color:#747a70;margin:18px 0 0">I recap automatici vengono inviati solo se hai scelto una frequenza diversa da “Disattivato”.</p>';
             $subject = '[' . ($site['name'] ?? 'PRJ') . '] Email di test';
 
@@ -1335,10 +1336,17 @@ try {
                     $recipient,
                     $subject,
                     prj_mail_html_document($subject, $body),
-                    "Ciao $display,\n\nL'invio SMTP di PRJ funziona correttamente.\n"
+                    "Ciao $display,\n\nQuesto è un test del trasporto email di PRJ.\n"
                 );
-                prj_digest_record($pdo, (int)$user['id'], 'test', $recipient, 'sent', 0);
-                reply(['ok' => true, 'recipient' => $recipient, 'transport' => $mail['transport'] ?? 'unknown']);
+                prj_digest_record($pdo, (int)$user['id'], 'test', $recipient, 'accepted', 0);
+                reply([
+                    'ok' => true,
+                    'accepted' => true,
+                    'delivery_confirmed' => false,
+                    'recipient' => $recipient,
+                    'transport' => $mail['transport'] ?? 'unknown',
+                    'response' => $mail['response'] ?? null,
+                ]);
             } catch (Throwable $e) {
                 prj_digest_record($pdo, (int)$user['id'], 'test', $recipient, 'failed', 0, $e->getMessage());
                 fail('Invio email non riuscito: ' . $e->getMessage(), 502);
