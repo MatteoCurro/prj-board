@@ -590,7 +590,8 @@ try {
 }
 
 if ($action === 'health') {
-    $smtp = prj_smtp_probe($config);
+    $transport = prj_email_transport_probe($config);
+    $smtp = $transport['smtp'] ?? [];
     reply([
         'ok' => true,
         'schema' => '1.2',
@@ -599,6 +600,8 @@ if ($action === 'health') {
         'mail_available' => function_exists('mail'),
         'smtp_available' => (bool)($smtp['ok'] ?? false),
         'smtp_ms' => $smtp['ms'] ?? null,
+        'email_transport_available' => (bool)($transport['ok'] ?? false),
+        'email_transport' => $transport['transport'] ?? 'none',
         'uploads_writable' => is_dir($uploadsRoot) && is_writable($uploadsRoot),
         'version' => '1.2.0',
     ]);
@@ -1210,7 +1213,7 @@ try {
                     "Ciao $display,\n\nL'invio SMTP di PRJ funziona correttamente.\n"
                 );
                 prj_digest_record($pdo, (int)$user['id'], 'test', $recipient, 'sent', 0);
-                reply(['ok' => true, 'recipient' => $recipient, 'smtp_response' => $mail['response'] ?? null]);
+                reply(['ok' => true, 'recipient' => $recipient, 'transport' => $mail['transport'] ?? 'unknown']);
             } catch (Throwable $e) {
                 prj_digest_record($pdo, (int)$user['id'], 'test', $recipient, 'failed', 0, $e->getMessage());
                 fail('Invio email non riuscito: ' . $e->getMessage(), 502);
