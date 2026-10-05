@@ -167,20 +167,12 @@ session_start();
 $action = (string)($_GET['action'] ?? 'status');
 
 if ($setupRequired) {
-    if ($action === 'health:private') {
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') fail('Metodo non consentito.', 405);
-    $body = jsonBody();
-    $provided = (string)($body['app_password'] ?? '');
-    if ($provided === '' || !hash_equals((string)$config['app_password'], $provided)) {
-        fail('Non autorizzato.', 401);
-    }
+    if ($action === 'health') {
     reply([
         'ok' => true,
-        'workspace_count' => (int)$pdo->query("SELECT COUNT(*) FROM boards")->fetchColumn(),
-        'column_count' => (int)$pdo->query("SELECT COUNT(*) FROM board_columns")->fetchColumn(),
-        'card_count' => (int)$pdo->query("SELECT COUNT(*) FROM cards WHERE archived = 0")->fetchColumn(),
-        'active_users' => (int)$pdo->query("SELECT COUNT(*) FROM users WHERE status = 'active'")->fetchColumn(),
-        'pending_users' => (int)$pdo->query("SELECT COUNT(*) FROM users WHERE status = 'pending'")->fetchColumn(),
+        'schema' => '0.2',
+        'has_workspace' => (bool)$pdo->query("SELECT 1 FROM boards LIMIT 1")->fetchColumn(),
+        'has_column' => (bool)$pdo->query("SELECT 1 FROM board_columns LIMIT 1")->fetchColumn(),
         'version' => '0.2.0',
     ]);
 }
