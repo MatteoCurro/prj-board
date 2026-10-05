@@ -32,7 +32,7 @@ function prj_digest_last_success(PDO $pdo, int $userId): ?string {
     $stmt = $pdo->prepare("
         SELECT created_at
         FROM digest_logs
-        WHERE user_id = ? AND kind = 'digest' AND status = 'sent'
+        WHERE user_id = ? AND kind = 'digest' AND status IN ('accepted', 'sent')
         ORDER BY id DESC
         LIMIT 1
     ");

@@ -41,6 +41,13 @@ SMTP:
 
 Prima di attivare i digest: test reale verso almeno Gmail + altro provider e verifica header/SPF/DKIM.
 
+Consolidamento 05/10/2026:
+- l'app distingue ora tra messaggio **accettato dal trasporto** e recapito effettivo, evitando falsi "inviato";
+- niente fallback silenzioso: il trasporto è esplicito (`php-mail` oppure SMTP autenticato);
+- supporto pronto per Gandi Mail autenticato `mail.gandi.net:465` tramite secret `SMTP_USER` + `SMTP_PASSWORD`;
+- il digest automatico resta silenzioso se non esistono card assegnate, non archiviate, non completate e con scadenza pertinente;
+- il deploy segnala quale SPF manca in base al trasporto effettivamente configurato.
+
 ## 4. Calendario workspace / Google Calendar
 
 ### Fase A consigliata — calendario ICS dedicato

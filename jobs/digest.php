@@ -43,8 +43,9 @@ try {
         ORDER BY id
     ")->fetchAll();
 
-    $sent = 0;
+    $accepted = 0;
     $skipped = 0;
+    $skippedNoTasks = 0;
     $failed = 0;
     foreach ($users as $user) {
         $user['id'] = (int)$user['id'];
@@ -58,6 +59,8 @@ try {
         $tasks = prj_digest_tasks($pdo, $user['id'], $user['digest_due_days']);
         if (!$tasks) {
             $skipped++;
+            $skippedNoTasks++;
+            echo "SKIP user={$user['id']} reason=no-open-due-tasks\n";
             continue;
         }
 
@@ -65,10 +68,12 @@ try {
         $mail = prj_digest_render($user, $tasks, (string)($config['app_url'] ?? 'https://prj.curromatteo.it'), (string)$site);
 
         try {
-            prj_send_mail($config, $recipient, $mail['subject'], $mail['html'], $mail['text']);
-            prj_digest_record($pdo, $user['id'], 'digest', $recipient, 'sent', count($tasks));
-            $sent++;
-            echo "SENT user={$user['id']} tasks=" . count($tasks) . "\n";
+            $result = prj_send_mail($config, $recipient, $mail['subject'], $mail['html'], $mail['text']);
+            prj_digest_record($pdo, $user['id'], 'digest', $recipient, 'accepted', count($tasks));
+            $accepted++;
+            echo "ACCEPTED user={$user['id']} tasks=" . count($tasks)
+                . " transport=" . ($result['transport'] ?? 'unknown')
+                . " response=" . preg_replace('/\\s+/', ' ', (string)($result['response'] ?? '')) . "\n";
         } catch (Throwable $e) {
             prj_digest_record($pdo, $user['id'], 'digest', $recipient, 'failed', count($tasks), $e->getMessage());
             $failed++;
@@ -78,7 +83,7 @@ try {
         usleep(150000);
     }
 
-    echo "PRJ digest complete: sent=$sent skipped=$skipped failed=$failed\n";
+    echo "PRJ digest complete: accepted=$accepted skipped=$skipped skipped_no_tasks=$skippedNoTasks failed=$failed\n";
     exit($failed > 0 ? 1 : 0);
 } catch (Throwable $e) {
     fwrite(STDERR, 'PRJ digest fatal: ' . $e->getMessage() . "\n");
