@@ -26,6 +26,9 @@ const requiredBindings = [
   ["add card click", "$$('.add-card-btn',boardEl).forEach"],
   ["complete card click", "$('.card-complete',boardEl).forEach"],
   ["edit card click", "$('.card-edit',boardEl).forEach"],
+  ["card quick-action pointer guard", "$('.task-quick-actions button',boardEl).forEach"],
+  ["due-date calendar", "$('#dueDatePickerBtn').addEventListener('click',openDueDatePicker)"],
+  ["due-date quick presets", "$('.due-quick-list [data-due-offset]').forEach"],
   ["completed view toggle", "$('#completedViewToggle').addEventListener('change'"],
   ["column form submit", "$('#columnForm').addEventListener('submit',saveColumn)"],
   ["workspace form submit", "$('#workspaceForm').addEventListener('submit',saveWorkspace)"],
@@ -47,6 +50,10 @@ const requiredCardFlow = [
   "async function setCardCompleted",
   "api('card:complete'",
   "async function uploadAttachments",
+  "filter:'.task-quick-actions,button,a,input,select,textarea,label'",
+  "preventOnFilter:false",
+  "function updateDueQuickState()",
+  "function openDueDatePicker()",
 ];
 for (const token of requiredCardFlow) {
   if (!js.includes(token)) fail('Card flow contract missing: ' + token);
@@ -54,7 +61,8 @@ for (const token of requiredCardFlow) {
 
 const requiredButtons = [
   'saveCardBtn','completeCardBtn','archiveCardBtn','addColumnBtn','refreshBtn',
-  'newWorkspaceBtn','adminBtn','logoutBtn','manageTagsBtn','completedViewToggle'
+  'newWorkspaceBtn','adminBtn','logoutBtn','manageTagsBtn','completedViewToggle',
+  'dueDatePickerBtn','clearDueDateBtn','cardDueDate'
 ];
 for (const id of requiredButtons) {
   if (!htmlIds.has(id)) fail('Missing critical control #' + id);
