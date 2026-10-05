@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/app.css?v=0.3.0">
+  <link rel="stylesheet" href="assets/app.css?v=0.4.0">
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -203,6 +203,11 @@
         <label class="field"><span>Scadenza</span><input id="cardDueDate" type="date"></label>
       </div>
 
+      <div class="field">
+        <div class="field-inline-head"><span>Assegnatari</span><small>Puoi selezionarne più di uno</small></div>
+        <div id="cardAssigneeChoices" class="assignee-choice-list"></div>
+      </div>
+
       <section class="attachment-section">
         <div class="field-inline-head"><span>Allegati</span><small>Max 25 MB per file</small></div>
         <div id="attachmentList" class="attachment-list"></div>
@@ -310,6 +315,7 @@
         <div class="task-topline"><span class="task-label" hidden></span><button class="card-edit ghost-icon" type="button" aria-label="Modifica card"><i data-lucide="pencil"></i></button></div>
         <h3 class="task-title"></h3>
         <p class="task-description" hidden></p>
+        <div class="task-assignees" hidden></div>
         <footer class="task-meta">
           <span class="task-due" hidden><i class="task-due-icon" data-lucide="calendar-days"></i><span></span></span>
           <span class="attachment-count" hidden><i data-lucide="paperclip"></i><span></span></span>
@@ -320,6 +326,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-  <script src="js/app.js?v=0.3.0" defer></script>
+  <script src="js/app.js?v=0.4.0" defer></script>
 </body>
 </html>
