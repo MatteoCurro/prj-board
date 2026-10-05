@@ -61,6 +61,8 @@ jobs:
           php -l api/index.php
           php -l lib/mailer.php
           php -l lib/digest.php
+          php -l lib/calendar.php
+          php -l api/calendar.php
           php -l jobs/digest.php
           node --check js/app.js
           node tests/ui-contract.mjs
@@ -87,8 +89,8 @@ jobs:
           cp index.html .htaccess dist/
           cp assets/app.css dist/assets/
           cp js/app.js dist/js/
-          cp api/index.php dist/api/
-          cp lib/mailer.php lib/digest.php dist/lib/
+          cp api/index.php api/calendar.php dist/api/
+          cp lib/mailer.php lib/digest.php lib/calendar.php dist/lib/
           cp jobs/digest.php dist/jobs/
 
           # Cache-bust frontend assets on every deployment so clients never keep
@@ -262,8 +264,8 @@ jobs:
           node - <<'NODE'
           const x = require('/tmp/prj-health.json');
           console.log('Health flags:', {ok:x.ok,schema:x.schema,has_workspace:x.has_workspace,has_column:x.has_column,uploads_writable:x.uploads_writable,mail_available:x.mail_available,smtp_available:x.smtp_available,smtp_ms:x.smtp_ms,email_transport_available:x.email_transport_available,email_transport:x.email_transport});
-          if (!x.ok || x.schema !== '1.2' || !x.has_workspace || !x.has_column || !x.uploads_writable || !x.mail_available || !x.email_transport_available) process.exit(1);
-          console.log('PRJ health OK: schema 1.2, private uploads writable, email transport='+x.email_transport+'.');
+          if (!x.ok || x.schema !== '1.3' || !x.has_workspace || !x.has_column || !x.uploads_writable || !x.mail_available || !x.email_transport_available) process.exit(1);
+          console.log('PRJ health OK: schema 1.3, private uploads writable, email transport='+x.email_transport+'.');
           NODE
 
           SPF="$(dig +short TXT curromatteo.it 2>/dev/null | tr -d '"' || true)"
