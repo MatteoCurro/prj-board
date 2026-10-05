@@ -60,6 +60,15 @@ jobs:
           set -euo pipefail
           php -l api/index.php
           node --check js/app.js
+          node - <<'NODE'
+          const fs = require('fs');
+          const source = fs.readFileSync('js/app.js', 'utf8');
+          const bad = [...source.matchAll(/(?<!\$)\$\([^)]*\)\.(?:forEach|map|filter)\b/g)].map(m => m[0]);
+          if (bad.length) {
+            console.error('Single-element selector used with collection method:', bad);
+            process.exit(1);
+          }
+          NODE
           test -f index.html
           test -f assets/app.css
           grep -Fq 'Bricolage+Grotesque' index.html
