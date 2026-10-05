@@ -167,7 +167,25 @@ session_start();
 $action = (string)($_GET['action'] ?? 'status');
 
 if ($setupRequired) {
-    if ($action === 'status') {
+    if ($action === 'health:private') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') fail('Metodo non consentito.', 405);
+    $body = jsonBody();
+    $provided = (string)($body['app_password'] ?? '');
+    if ($provided === '' || !hash_equals((string)$config['app_password'], $provided)) {
+        fail('Non autorizzato.', 401);
+    }
+    reply([
+        'ok' => true,
+        'workspace_count' => (int)$pdo->query("SELECT COUNT(*) FROM boards")->fetchColumn(),
+        'column_count' => (int)$pdo->query("SELECT COUNT(*) FROM board_columns")->fetchColumn(),
+        'card_count' => (int)$pdo->query("SELECT COUNT(*) FROM cards WHERE archived = 0")->fetchColumn(),
+        'active_users' => (int)$pdo->query("SELECT COUNT(*) FROM users WHERE status = 'active'")->fetchColumn(),
+        'pending_users' => (int)$pdo->query("SELECT COUNT(*) FROM users WHERE status = 'pending'")->fetchColumn(),
+        'version' => '0.2.0',
+    ]);
+}
+
+if ($action === 'status') {
         reply(['ok' => true, 'setup_required' => true, 'authenticated' => false, 'version' => '0.2.0']);
     }
     fail('Configurazione server incompleta.', 503);
