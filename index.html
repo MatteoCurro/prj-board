@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/app.css?v=0.5.3">
+  <link rel="stylesheet" href="assets/app.css?v=1.1.0">
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -72,6 +72,12 @@
             <button id="refreshBtn" class="icon-btn" type="button" aria-label="Aggiorna workspace" title="Aggiorna"><i data-lucide="refresh-cw"></i></button>
           </div>
         </section>
+
+        <div class="quick-filter-bar" aria-label="Filtri rapidi">
+          <button class="quick-filter active" type="button" data-quick-filter="all"><i data-lucide="layout-grid"></i> Tutte</button>
+          <button class="quick-filter" type="button" data-quick-filter="mine"><i data-lucide="user-round-check"></i> Mie</button>
+          <button class="quick-filter" type="button" data-quick-filter="due"><i data-lucide="clock-3"></i> In scadenza</button>
+        </div>
 
         <section id="board" class="board" aria-label="Project board"></section>
 
@@ -250,19 +256,35 @@
   </dialog>
 
   <dialog id="profileDialog" class="modal">
-    <form id="profileForm" class="modal-card compact">
+    <div class="modal-card compact profile-modal-card">
       <div class="modal-head">
         <div><p class="eyebrow">Account</p><h2 id="profileTitle">Profilo</h2></div>
         <button class="ghost-icon dialog-close" type="button" aria-label="Chiudi"><i data-lucide="x"></i></button>
       </div>
-      <label class="field"><span>Password attuale</span><input id="profileCurrentPassword" type="password" autocomplete="current-password" required></label>
-      <div class="form-grid">
-        <label class="field"><span>Nuova password</span><input id="profileNewPassword" type="password" minlength="8" autocomplete="new-password" required></label>
-        <label class="field"><span>Ripeti password</span><input id="profileNewPassword2" type="password" minlength="8" autocomplete="new-password" required></label>
-      </div>
-      <p id="profileError" class="form-error" hidden></p>
-      <div class="modal-actions"><button class="button ghost dialog-cancel" type="button">Annulla</button><button class="button primary" type="submit">Cambia password</button></div>
-    </form>
+
+      <form id="profileForm">
+        <label class="field"><span>Nome visualizzato</span><input id="profileDisplayName" maxlength="80" autocomplete="name" placeholder="Es. Matteo"><small>Viene usato nelle card assegnate; se vuoto mostriamo l'username.</small></label>
+        <label class="field"><span>Email notifiche</span><input id="profileNotificationEmail" type="email" maxlength="190" autocomplete="email" placeholder="nome@dominio.it"><small>Può essere diversa da un'eventuale email di registrazione.</small></label>
+        <div class="form-grid">
+          <label class="field"><span>Recap scadenze</span><select id="profileDigestFrequency"><option value="off">Disattivato</option><option value="daily">Giornaliero</option><option value="weekly">Settimanale</option></select></label>
+          <label class="field"><span>Considera in scadenza entro</span><select id="profileDigestDueDays"><option value="1">1 giorno</option><option value="2">2 giorni</option><option value="3">3 giorni</option><option value="5">5 giorni</option><option value="7">7 giorni</option><option value="14">14 giorni</option></select></label>
+        </div>
+        <p class="helper-copy">Le preferenze vengono salvate ora; l'invio automatico delle email verrà attivato nella v1.2 dopo il test SMTP.</p>
+        <p id="profileSettingsError" class="form-error" hidden></p>
+        <div class="modal-actions"><button class="button ghost dialog-cancel" type="button">Chiudi</button><button class="button primary" type="submit">Salva profilo</button></div>
+      </form>
+
+      <form id="profilePasswordForm" class="profile-password-section">
+        <div class="section-head compact-section"><div><h3>Password</h3><p>Modifica la password di accesso.</p></div></div>
+        <label class="field"><span>Password attuale</span><input id="profileCurrentPassword" type="password" autocomplete="current-password" required></label>
+        <div class="form-grid">
+          <label class="field"><span>Nuova password</span><input id="profileNewPassword" type="password" minlength="8" autocomplete="new-password" required></label>
+          <label class="field"><span>Ripeti password</span><input id="profileNewPassword2" type="password" minlength="8" autocomplete="new-password" required></label>
+        </div>
+        <p id="profilePasswordError" class="form-error" hidden></p>
+        <div class="modal-actions"><button class="button secondary" type="submit">Cambia password</button></div>
+      </form>
+    </div>
   </dialog>
 
   <dialog id="resetPasswordDialog" class="modal">
@@ -335,7 +357,7 @@
     <article class="task-card" tabindex="0" data-card-id="">
       <div class="task-accent"></div>
       <div class="task-card-body">
-        <div class="task-topline"><span class="task-label" hidden></span><div class="task-quick-actions"><button class="card-complete ghost-icon" type="button" aria-label="Segna come fatto" title="Segna come fatto"><i data-lucide="circle-check-big"></i></button><button class="card-edit ghost-icon" type="button" aria-label="Modifica card"><i data-lucide="pencil"></i></button></div></div>
+        <div class="task-topline"><span class="task-label" hidden></span><div class="task-quick-actions"><span class="card-drag-handle" title="Trascina"><i data-lucide="grip-vertical"></i></span><button class="card-complete ghost-icon" type="button" aria-label="Segna come fatto" title="Segna come fatto"><i data-lucide="circle-check-big"></i></button><button class="card-edit ghost-icon" type="button" aria-label="Modifica card"><i data-lucide="pencil"></i></button></div></div>
         <h3 class="task-title"></h3>
         <p class="task-description" hidden></p>
         <div class="task-assignees" hidden></div>
@@ -349,6 +371,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-  <script src="js/app.js?v=0.5.3" defer></script>
+  <script src="js/app.js?v=1.1.0" defer></script>
 </body>
 </html>
