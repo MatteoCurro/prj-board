@@ -93,6 +93,6 @@ Ordine suggerito:
 ## Sequenza proposta
 - ✅ v1.1: profilo utente + mobile polish + filtri "Mie/In scadenza".
 - ✅ v1.2: recap email + test SMTP + anacron.
-- v1.3: feed ICS personale/workspace.
+- ✅ v1.3: feed ICS personale/workspace.
 - v1.4: checklist + priorità + vista Le mie attività.
 - v2 opzionale: Google OAuth/API per sincronizzazione Calendar real-time.
