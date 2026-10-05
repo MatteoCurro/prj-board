@@ -1353,6 +1353,7 @@ try {
                     'delivery_confirmed' => false,
                     'recipient' => $recipient,
                     'transport' => $mail['transport'] ?? 'unknown',
+                    'provider' => $config['mail_provider'] ?? null,
                     'response' => $mail['response'] ?? null,
                     'message_id' => $mail['message_id'] ?? null,
                 ]);
