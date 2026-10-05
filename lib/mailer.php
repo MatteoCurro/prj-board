@@ -224,6 +224,7 @@ function prj_mail_runtime_diagnostic(): array {
         'sendmail_binary' => $binary,
         'sendmail_exists' => $binary !== '' ? file_exists($binary) : null,
         'sendmail_executable' => $binary !== '' ? is_executable($binary) : null,
+        'sendmail_realpath' => $binary !== '' ? (realpath($binary) ?: null) : null,
         'smtp_ini' => (string)ini_get('SMTP'),
         'smtp_port_ini' => (string)ini_get('smtp_port'),
         'mail_log' => (string)ini_get('mail.log'),
@@ -249,7 +250,7 @@ function prj_sendmail_verbose_diagnostic(array $config, string $to, string $subj
         return ['attempted' => false, 'ok' => false, 'error' => 'Indirizzo email non valido.', 'runtime' => $runtime];
     }
 
-    $command = $sendmailPath . ' -v -f ' . escapeshellarg($from) . ' ' . escapeshellarg($to);
+    $command = $sendmailPath . ' -v -f ' . escapeshellarg($from);
     $spec = [
         0 => ['pipe', 'r'],
         1 => ['pipe', 'w'],
@@ -286,11 +287,13 @@ function prj_sendmail_verbose_diagnostic(array $config, string $to, string $subj
     $exitCode = proc_close($process);
 
     $limit = static fn(string $value): string => mb_substr(trim($value), 0, 8000);
+    $combined = trim((string)$stdout . "\n" . (string)$stderr);
+    $knownError = preg_match('/(?:recipients with -t option not supported|no recipients specified|connection refused|refused|rejected|authentication failed|authorization failed|invalid|cannot|unable|failed|failure|error)/i', $combined) === 1;
     return [
         'attempted' => true,
-        'ok' => $exitCode === 0,
+        'ok' => $exitCode === 0 && !$knownError,
         'exit_code' => $exitCode,
-        'command' => $sendmailPath . ' -v -f <sender> <recipient>',
+        'command' => $sendmailPath . ' -v -f <sender>  # destinatario letto da To: grazie a -t',
         'stdout' => $limit((string)$stdout),
         'stderr' => $limit((string)$stderr),
         'message_id' => $messageId,
