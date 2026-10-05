@@ -210,6 +210,94 @@ function prj_smtp_local_diagnostic_send(array $config, string $to, string $subje
     }
 }
 
+function prj_mail_runtime_diagnostic(): array {
+    $sendmailPath = trim((string)ini_get('sendmail_path'));
+    $binary = '';
+    if ($sendmailPath !== '' && preg_match('/^\s*([^\s]+)/', $sendmailPath, $match)) {
+        $binary = trim($match[1], "'\"");
+    }
+    $disabled = array_values(array_filter(array_map('trim', explode(',', (string)ini_get('disable_functions')))));
+    return [
+        'php_version' => PHP_VERSION,
+        'sapi' => PHP_SAPI,
+        'sendmail_path' => $sendmailPath,
+        'sendmail_binary' => $binary,
+        'sendmail_exists' => $binary !== '' ? file_exists($binary) : null,
+        'sendmail_executable' => $binary !== '' ? is_executable($binary) : null,
+        'smtp_ini' => (string)ini_get('SMTP'),
+        'smtp_port_ini' => (string)ini_get('smtp_port'),
+        'mail_log' => (string)ini_get('mail.log'),
+        'mail_force_extra_parameters' => (string)ini_get('mail.force_extra_parameters'),
+        'proc_open_available' => function_exists('proc_open') && !in_array('proc_open', $disabled, true),
+        'exec_available' => function_exists('exec') && !in_array('exec', $disabled, true),
+    ];
+}
+
+function prj_sendmail_verbose_diagnostic(array $config, string $to, string $subject, string $text): array {
+    $runtime = prj_mail_runtime_diagnostic();
+    $sendmailPath = trim((string)($runtime['sendmail_path'] ?? ''));
+    if ($sendmailPath === '') {
+        return ['attempted' => false, 'ok' => false, 'error' => 'sendmail_path vuoto.', 'runtime' => $runtime];
+    }
+    if (empty($runtime['proc_open_available'])) {
+        return ['attempted' => false, 'ok' => false, 'error' => 'proc_open non disponibile.', 'runtime' => $runtime];
+    }
+
+    $from = trim((string)($config['mail_from'] ?? 'prj@curromatteo.it'));
+    $fromName = trim((string)($config['mail_from_name'] ?? 'PRJ'));
+    if (!filter_var($to, FILTER_VALIDATE_EMAIL) || !filter_var($from, FILTER_VALIDATE_EMAIL)) {
+        return ['attempted' => false, 'ok' => false, 'error' => 'Indirizzo email non valido.', 'runtime' => $runtime];
+    }
+
+    $command = $sendmailPath . ' -v -f ' . escapeshellarg($from) . ' ' . escapeshellarg($to);
+    $spec = [
+        0 => ['pipe', 'r'],
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ];
+
+    $process = @proc_open($command, $spec, $pipes);
+    if (!is_resource($process)) {
+        return ['attempted' => true, 'ok' => false, 'error' => 'Impossibile avviare sendmail_path.', 'runtime' => $runtime];
+    }
+
+    $messageId = bin2hex(random_bytes(12)) . '@' . preg_replace('/^.*@/', '', $from);
+    $message = implode("\r\n", [
+        'Date: ' . date(DATE_RFC2822),
+        'From: ' . prj_mail_header($fromName) . ' <' . $from . '>',
+        'To: <' . $to . '>',
+        'Subject: ' . prj_mail_header($subject),
+        'Message-ID: <' . $messageId . '>',
+        'MIME-Version: 1.0',
+        'Content-Type: text/plain; charset=UTF-8',
+        'Content-Transfer-Encoding: 8bit',
+        'X-Mailer: PRJ Board Sendmail Diagnostic',
+        '',
+        str_replace("\r", '', $text),
+        '',
+    ]);
+
+    fwrite($pipes[0], $message);
+    fclose($pipes[0]);
+    $stdout = stream_get_contents($pipes[1]);
+    fclose($pipes[1]);
+    $stderr = stream_get_contents($pipes[2]);
+    fclose($pipes[2]);
+    $exitCode = proc_close($process);
+
+    $limit = static fn(string $value): string => mb_substr(trim($value), 0, 8000);
+    return [
+        'attempted' => true,
+        'ok' => $exitCode === 0,
+        'exit_code' => $exitCode,
+        'command' => $sendmailPath . ' -v -f <sender> <recipient>',
+        'stdout' => $limit((string)$stdout),
+        'stderr' => $limit((string)$stderr),
+        'message_id' => $messageId,
+        'runtime' => $runtime,
+    ];
+}
+
 function prj_php_mail_send(array $config, string $to, string $subject, string $html): array {
     if (!function_exists('mail')) {
         throw new RuntimeException('PHP mail() non disponibile.');
