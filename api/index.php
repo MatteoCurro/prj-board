@@ -474,6 +474,7 @@ if ($action === 'health') {
         'has_workspace' => (bool)$pdo->query("SELECT 1 FROM boards LIMIT 1")->fetchColumn(),
         'has_column' => (bool)$pdo->query("SELECT 1 FROM board_columns LIMIT 1")->fetchColumn(),
         'mail_available' => function_exists('mail'),
+        'uploads_writable' => is_dir($uploadsRoot) && is_writable($uploadsRoot),
         'version' => '0.3.0',
     ]);
 }
